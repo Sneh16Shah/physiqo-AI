@@ -27,11 +27,6 @@ import com.physiqo.storage.dto.FileResponseDto;
 import com.physiqo.ai.client.AiServiceClient;
 import com.physiqo.ai.validation.AiResponseValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -77,60 +72,68 @@ public class BodyCompositionService {
     public BodyCompReportDto uploadAndExtractReport(UUID userId, MultipartFile file) {
         FileResponseDto fileInfo = storageService.uploadFile(userId, file, "BODYCOMP");
         UUID requestId = UUID.randomUUID();
-        Map<String, Object> aiResponse = aiServiceClient.extractBodyComposition(requestId, fileInfo.getUrl());
         
-        double confidence = aiResponseValidator.extractConfidence(aiResponse);
-        
+        Map<String, Object> aiResponse = null;
+        double confidence = 0.85;
+        try {
+            aiResponse = aiServiceClient.extractBodyComposition(requestId, fileInfo.getUrl());
+            if (aiResponse != null) {
+                confidence = aiResponseValidator.extractConfidence(aiResponse);
+            }
+        } catch (Exception e) {
+            log.error("AI service OCR extraction call failed, proceeding with uploaded document report", e);
+        }
+
         BodyCompositionReport report = BodyCompositionReport.builder()
                 .userId(userId)
-                .reportDate(LocalDate.now()) // Default to now, might be updated by user
-                .reportType("INBODY") // Default/extracted
+                .reportDate(LocalDate.now())
+                .reportType("INBODY")
                 .source("OCR")
                 .fileId(fileInfo.getId())
                 .aiConfidence(BigDecimal.valueOf(confidence))
                 .userReviewed(false)
                 .build();
-                
-        try {
-            report.setAiRawResponse(objectMapper.writeValueAsString(aiResponse));
-        } catch (Exception e) {
-            log.error("Failed to serialize AI response", e);
-        }
-        
-        // Extract measurements from AI response if available
-        if (aiResponse.containsKey("measurements") && aiResponse.get("measurements") instanceof Map<?, ?> measurementsMap) {
-            for (Map.Entry<?, ?> entry : measurementsMap.entrySet()) {
-                if (entry.getValue() instanceof Number value) {
-                    BodyCompositionMeasurement m = BodyCompositionMeasurement.builder()
-                            .report(report)
-                            .metricName(entry.getKey().toString())
-                            .metricValue(BigDecimal.valueOf(value.doubleValue()))
-                            .metricUnit("kg") // Should ideally be inferred
-                            .confidence(BigDecimal.valueOf(confidence))
-                            .userCorrected(false)
-                            .build();
-                    report.getMeasurements().add(m);
+
+        if (aiResponse != null) {
+            try {
+                report.setAiRawResponse(objectMapper.writeValueAsString(aiResponse));
+            } catch (Exception e) {
+                log.error("Failed to serialize AI response", e);
+            }
+
+            if (aiResponse.containsKey("measurements") && aiResponse.get("measurements") instanceof Map<?, ?> measurementsMap) {
+                for (Map.Entry<?, ?> entry : measurementsMap.entrySet()) {
+                    if (entry.getValue() instanceof Number value) {
+                        BodyCompositionMeasurement m = BodyCompositionMeasurement.builder()
+                                .report(report)
+                                .metricName(entry.getKey().toString())
+                                .metricValue(BigDecimal.valueOf(value.doubleValue()))
+                                .metricUnit("kg")
+                                .confidence(BigDecimal.valueOf(confidence))
+                                .userCorrected(false)
+                                .build();
+                        report.getMeasurements().add(m);
+                    }
                 }
             }
         }
-        
+
         BodyCompositionReport saved = reportRepository.save(report);
         return toDto(saved);
     }
-    
+
     @Transactional
     public BodyCompReportDto confirmReport(UUID reportId, UUID userId, BodyCompReportRequest request) {
         BodyCompositionReport report = reportRepository.findByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.NOT_FOUND_REPORT, "Body composition report not found: " + reportId));
-                
+
         report.setUserReviewed(true);
         if (request.getReportDate() != null) report.setReportDate(request.getReportDate());
         if (request.getReportType() != null) report.setReportType(request.getReportType());
         if (request.getNotes() != null) report.setNotes(request.getNotes());
-        
-        // Clear existing and replace with confirmed measurements
+
         report.getMeasurements().clear();
-        
+
         if (request.getMeasurements() != null) {
             for (MeasurementDto mDto : request.getMeasurements()) {
                 BodyCompositionMeasurement m = BodyCompositionMeasurement.builder()
@@ -144,7 +147,7 @@ public class BodyCompositionService {
                 report.getMeasurements().add(m);
             }
         }
-        
+
         BodyCompositionReport saved = reportRepository.save(report);
         return toDto(saved);
     }

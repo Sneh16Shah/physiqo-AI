@@ -36,7 +36,10 @@ public class MinioStorageService implements StorageService {
     private String minioEndpoint;
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-            "image/jpeg", "image/png", "image/webp", "application/pdf"
+            "image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp",
+            "application/pdf", "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/octet-stream"
     );
 
     @Override
@@ -46,24 +49,28 @@ public class MinioStorageService implements StorageService {
             throw new ValidationException("Uploaded file cannot be empty");
         }
 
-        if (file.getSize() > 10 * 1024 * 1024) {
-            throw new StorageException(ErrorCode.STORAGE_FILE_TOO_LARGE, "File size exceeds 10MB limit");
+        if (file.getSize() > 15 * 1024 * 1024) {
+            throw new StorageException(ErrorCode.STORAGE_FILE_TOO_LARGE, "File size exceeds 15MB limit");
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase())) {
-            throw new ValidationException("Unsupported file type: " + contentType);
+        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+        String ext = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase() : "";
+
+        boolean isAllowedType = contentType != null && ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase());
+        boolean isAllowedExt = Set.of(".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx").contains(ext);
+
+        if (!isAllowedType && !isAllowedExt) {
+            throw new ValidationException("Unsupported file type: " + contentType + " (file: " + originalFilename + ")");
         }
 
-        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
-        String ext = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")) : "";
         String objectKey = String.format("%s/%s/%s%s", userId, category.toLowerCase(), UUID.randomUUID(), ext);
 
         try (InputStream inputStream = file.getInputStream()) {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucket)
                     .key(objectKey)
-                    .contentType(contentType)
+                    .contentType(contentType != null ? contentType : "application/octet-stream")
                     .contentLength(file.getSize())
                     .build();
 
@@ -78,7 +85,7 @@ public class MinioStorageService implements StorageService {
                 .bucket(bucket)
                 .objectKey(objectKey)
                 .originalFilename(originalFilename)
-                .contentType(contentType)
+                .contentType(contentType != null ? contentType : "application/octet-stream")
                 .sizeBytes(file.getSize())
                 .category(category.toUpperCase())
                 .build();

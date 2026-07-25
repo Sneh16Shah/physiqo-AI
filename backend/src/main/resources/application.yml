@@ -15,7 +15,7 @@ spring:
   jpa:
     open-in-view: false                  # Detached entity best practice
     hibernate:
-      ddl-auto: update                 # Schema managed by Flyway, never Hibernate
+      ddl-auto: none                   # Schema managed by Flyway, never Hibernate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -40,8 +40,8 @@ spring:
   # ── Servlet ───────────────────────────────────────────────────────────────────
   servlet:
     multipart:
-      max-file-size: 10MB                # docs/ARCHITECTURE.md §8
-      max-request-size: 10MB
+      max-file-size: 15MB
+      max-request-size: 15MB
 
   # ── DevTools (hot reload — auto-disabled when not dev profile) ──────────────
   devtools:

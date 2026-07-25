@@ -16,9 +16,10 @@ public class AiServiceClient {
 
     public AiServiceClient(
             RestClient.Builder restClientBuilder,
-            @Value("${physiqo.ai.base-url:http://localhost:8000/api/v1}") String baseUrl,
-            @Value("${physiqo.ai.service-key:dev-service-key}") String serviceKey) {
-        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
+            @Value("${physiqo.ai.base-url:${AI_SERVICE_URL:http://ai-service:8000}/api/v1}") String baseUrl,
+            @Value("${physiqo.ai.service-key:${AI_SERVICE_KEY:dev-service-key}}") String serviceKey) {
+        String finalUrl = baseUrl.endsWith("/api/v1") ? baseUrl : baseUrl + "/api/v1";
+        this.restClient = restClientBuilder.baseUrl(finalUrl).build();
         this.serviceKey = serviceKey;
     }
 
