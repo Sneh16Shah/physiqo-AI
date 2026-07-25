@@ -9,7 +9,7 @@ import { toast } from '../../stores/toastStore';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -32,7 +32,16 @@ const LoginPage: React.FC = () => {
       navigate('/');
     } catch (error: any) {
       console.error('Login failed', error);
-      const errMsg = error.response?.data?.message || 'Invalid email or password. Please check your credentials.';
+      
+      let errMsg = 'Invalid email or password. Please check your credentials.';
+      const resData = error.response?.data;
+
+      if (resData?.details && Array.isArray(resData.details) && resData.details.length > 0) {
+        errMsg = resData.details.map((d: any) => `${d.field ? d.field + ': ' : ''}${d.issue}`).join(' | ');
+      } else if (resData?.message) {
+        errMsg = resData.message;
+      }
+
       setApiError(errMsg);
       toast.error(errMsg, 'Login Failed');
     }

@@ -9,7 +9,7 @@ import { toast } from '../../stores/toastStore';
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -30,7 +30,16 @@ const RegisterPage: React.FC = () => {
       navigate('/login');
     } catch (error: any) {
       console.error('Registration failed', error);
-      const errMsg = error.response?.data?.message || 'Registration failed. An account with this email may already exist.';
+      
+      let errMsg = 'Registration failed. An account with this email may already exist.';
+      const resData = error.response?.data;
+
+      if (resData?.details && Array.isArray(resData.details) && resData.details.length > 0) {
+        errMsg = resData.details.map((d: any) => `${d.field ? d.field + ': ' : ''}${d.issue}`).join(' | ');
+      } else if (resData?.message) {
+        errMsg = resData.message;
+      }
+
       setApiError(errMsg);
       toast.error(errMsg, 'Registration Failed');
     }
@@ -88,7 +97,7 @@ const RegisterPage: React.FC = () => {
               type="password"
               {...register('password')}
               className="w-full px-4 py-2 bg-surface-950 border border-surface-800 rounded-lg focus:ring-2 focus:ring-brand-500 text-white"
-              placeholder="••••••••"
+              placeholder="•••••••• (min 8 characters)"
             />
             {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
           </div>
