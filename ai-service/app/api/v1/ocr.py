@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Body
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from typing import Dict, Any, Optional
 import httpx
 import logging
@@ -20,22 +20,27 @@ async def scan_ocr_image(
 ):
     """
     Endpoint called by Spring Boot AiServiceClient: POST /api/v1/ocr/scan
-    Payload: {"image_url": "http://minio:9000/physiqo-uploads/..."}
+    Payload: {"image_url": "http://localhost:9000/physiqo-uploads/..."}
     """
     image_bytes = None
     mime_type = "image/jpeg"
     
     if payload.image_url:
+        # Resolve internal Docker network hostname for MinIO
+        target_url = payload.image_url.replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
+        logger.info(f"Fetching image for OCR from target URL: {target_url} (original: {payload.image_url})")
+        
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                res = await client.get(payload.image_url)
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                res = await client.get(target_url)
                 if res.status_code == 200:
                     image_bytes = res.content
                     mime_type = res.headers.get("content-type", "image/jpeg")
+                    logger.info(f"Successfully downloaded image for OCR ({len(image_bytes)} bytes)")
                 else:
-                    logger.warning(f"Failed to fetch image from URL {payload.image_url}: HTTP {res.status_code}")
+                    logger.warning(f"Failed to fetch image from URL {target_url}: HTTP {res.status_code}")
         except Exception as e:
-            logger.error(f"Error downloading image from {payload.image_url}: {e}")
+            logger.error(f"Error downloading image from {target_url}: {e}")
 
     pipeline = BodyCompOCRPipeline()
     
@@ -43,34 +48,35 @@ async def scan_ocr_image(
         result = await pipeline.extract(image_bytes, mime_type=mime_type)
     else:
         # Fallback if image download failed
+        logger.warning("No image bytes available for OCR, running fallback pipeline")
         result = await pipeline.extract(b"", mime_type="image/jpeg")
         
-    # Convert response into flat measurements map for Spring Boot & React frontend
+    # Flat measurements map for Java BodyCompositionService (which checks: entry.getValue() instanceof Number)
     measurements_map: Dict[str, Any] = {}
     if result.data and result.data.measurement:
         m = result.data.measurement
         if m.weight_kg is not None:
-            measurements_map["weight"] = {"value": m.weight_kg, "unit": "kg"}
+            measurements_map["weight"] = m.weight_kg
+        if m.body_fat_kg is not None:
+            measurements_map["body_fat_mass"] = m.body_fat_kg
         if m.body_fat_percentage is not None:
-            measurements_map["body_fat_pct"] = {"value": m.body_fat_percentage, "unit": "%"}
-        elif m.body_fat_kg is not None:
-            measurements_map["body_fat_mass"] = {"value": m.body_fat_kg, "unit": "kg"}
+            measurements_map["body_fat_pct"] = m.body_fat_percentage
         if m.muscle_mass_kg is not None:
-            measurements_map["skeletal_muscle_mass"] = {"value": m.muscle_mass_kg, "unit": "kg"}
+            measurements_map["skeletal_muscle_mass"] = m.muscle_mass_kg
         if m.fat_free_mass_kg is not None:
-            measurements_map["fat_free_mass"] = {"value": m.fat_free_mass_kg, "unit": "kg"}
+            measurements_map["fat_free_mass"] = m.fat_free_mass_kg
         if m.water_content_kg is not None:
-            measurements_map["water_content"] = {"value": m.water_content_kg, "unit": "kg"}
-        elif m.water_percentage is not None:
-            measurements_map["water_pct"] = {"value": m.water_percentage, "unit": "%"}
+            measurements_map["water_content"] = m.water_content_kg
+        if m.water_percentage is not None:
+            measurements_map["water_pct"] = m.water_percentage
         if m.protein_kg is not None:
-            measurements_map["protein"] = {"value": m.protein_kg, "unit": "kg"}
+            measurements_map["protein"] = m.protein_kg
         if m.inorganic_salt_kg is not None:
-            measurements_map["inorganic_salt"] = {"value": m.inorganic_salt_kg, "unit": "kg"}
+            measurements_map["inorganic_salt"] = m.inorganic_salt_kg
         if m.bmi is not None:
-            measurements_map["bmi"] = {"value": m.bmi, "unit": "kg/m²"}
+            measurements_map["bmi"] = m.bmi
         if m.visceral_fat_level is not None:
-            measurements_map["visceral_fat_level"] = {"value": m.visceral_fat_level, "unit": "level"}
+            measurements_map["visceral_fat_level"] = m.visceral_fat_level
 
     return {
         "confidence": result.confidence_score,

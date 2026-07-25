@@ -103,12 +103,30 @@ public class BodyCompositionService {
 
             if (aiResponse.containsKey("measurements") && aiResponse.get("measurements") instanceof Map<?, ?> measurementsMap) {
                 for (Map.Entry<?, ?> entry : measurementsMap.entrySet()) {
+                    Double numVal = null;
+                    String unitVal = "kg";
+
                     if (entry.getValue() instanceof Number value) {
+                        numVal = value.doubleValue();
+                    } else if (entry.getValue() instanceof Map<?, ?> objMap) {
+                        if (objMap.containsKey("value") && objMap.get("value") instanceof Number vNum) {
+                            numVal = vNum.doubleValue();
+                        }
+                        if (objMap.containsKey("unit") && objMap.get("unit") != null) {
+                            unitVal = objMap.get("unit").toString();
+                        }
+                    }
+
+                    if (numVal != null) {
+                        String metricKey = entry.getKey().toString();
+                        if (metricKey.contains("pct") || metricKey.contains("percent")) {
+                            unitVal = "%";
+                        }
                         BodyCompositionMeasurement m = BodyCompositionMeasurement.builder()
                                 .report(report)
-                                .metricName(entry.getKey().toString())
-                                .metricValue(BigDecimal.valueOf(value.doubleValue()))
-                                .metricUnit("kg")
+                                .metricName(metricKey)
+                                .metricValue(BigDecimal.valueOf(numVal))
+                                .metricUnit(unitVal)
                                 .confidence(BigDecimal.valueOf(confidence))
                                 .userCorrected(false)
                                 .build();
