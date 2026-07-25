@@ -3,6 +3,8 @@ package com.physiqo.bodycomp.entity;
 import com.physiqo.common.entity.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,6 +46,7 @@ public class BodyCompositionReport extends AuditableEntity {
     @Column(name = "user_reviewed", nullable = false)
     private boolean userReviewed = false;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ai_raw_response", columnDefinition = "jsonb")
     private String aiRawResponse;
 
