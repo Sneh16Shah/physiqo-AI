@@ -1,0 +1,47 @@
+# ── Test profile ─────────────────────────────────────────────────────────────────
+# Used by the P0-T02 context-load smoke test. Connects to a real PostgreSQL
+# instance (either the docker-compose service or a Testcontainers instance).
+#
+# For a plain `mvn test` without Docker, run with `-Dspring.profiles.active=unit`
+# which excludes DataSource/JPA/Flyway autoconfiguration (see application-unit.yml).
+
+spring:
+  # ── Datasource: connect to the docker-compose Postgres over the host port ──
+  # Override at runtime with -DSPRING_DATASOURCE_URL=... when running elsewhere.
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/physiqo}
+    username: ${POSTGRES_USER:physiqo}
+    password: ${POSTGRES_PASSWORD:physiqo_dev}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 1
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# MinIO config placeholder (not exercised by the smoke test)
+minio:
+  endpoint: http://localhost:9000
+  access-key: test-key
+  secret-key: test-secret
+  bucket: physiqo-test-uploads
+
+logging:
+  level:
+    com.physiqo: info
+    org.hibernate.SQL: warn

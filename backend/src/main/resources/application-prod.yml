@@ -1,0 +1,39 @@
+# ── Production profile ──────────────────────────────────────────────────────────
+# All secrets MUST come from environment variables — never from config files.
+# See docs/DEPLOYMENT.md §4, docs/SECURITY.md §4.
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+
+  jpa:
+    show-sql: false
+
+# CORS — docs/SECURITY.md §3
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://physiqo.app}
+
+# MinIO
+minio:
+  endpoint: ${MINIO_ENDPOINT}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket: ${MINIO_BUCKET:physiqo-uploads}
+
+# ── Logging (structured JSON for prod) ─────────────────────────────────────────
+# docs/ARCHITECTURE.md §11 — JSON format in prod
+logging:
+  level:
+    root: warn
+    com.physiqo: info

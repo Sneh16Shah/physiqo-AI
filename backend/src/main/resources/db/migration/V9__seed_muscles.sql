@@ -1,0 +1,16 @@
+INSERT INTO muscles (id, name, description) VALUES
+(gen_random_uuid(), 'Pectoralis Major', 'Chest muscle'),
+(gen_random_uuid(), 'Latissimus Dorsi', 'Back muscle'),
+(gen_random_uuid(), 'Deltoid', 'Shoulder muscle'),
+(gen_random_uuid(), 'Biceps Brachii', 'Front upper arm'),
+(gen_random_uuid(), 'Triceps Brachii', 'Back upper arm'),
+(gen_random_uuid(), 'Quadriceps', 'Front thigh'),
+(gen_random_uuid(), 'Hamstrings', 'Back thigh'),
+(gen_random_uuid(), 'Gluteus Maximus', 'Buttocks'),
+(gen_random_uuid(), 'Calves', 'Lower leg'),
+(gen_random_uuid(), 'Abs', 'Abdominal muscles'),
+(gen_random_uuid(), 'Obliques', 'Side abdominal muscles'),
+(gen_random_uuid(), 'Trapezius', 'Upper back and neck'),
+(gen_random_uuid(), 'Erector Spinae', 'Lower back'),
+(gen_random_uuid(), 'Forearms', 'Lower arm'),
+(gen_random_uuid(), 'Adductors', 'Inner thigh');

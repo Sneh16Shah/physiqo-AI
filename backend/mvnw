@@ -1,0 +1,69 @@
+#!/bin/sh
+# Maven Wrapper script — downloaded from https://maven.apache.org/wrapper/
+# Licensed under Apache License 2.0
+
+# ------------------------------------------------------------------------------
+#   Licensed to the Apache Software Foundation (ASF) under one
+#   or more contributor license agreements.  See the NOTICE file
+#   distributed with this work for additional information
+#   regarding copyright ownership.  The ASF licenses this file
+#   to you under the Apache License, Version 2.0 (the
+#   "License"); you may not use this file except in compliance
+#   with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing,
+#   software distributed under the License is distributed on an
+#   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#   KIND, either express or implied.  See the License for the
+#   specific language governing permissions and limitations
+#   under the License.
+# ------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Apache Maven Wrapper startup batch script, version 3.3.2
+# ------------------------------------------------------------------------------
+
+set -e
+
+# Determine project base directory
+MAVEN_PROJECTBASEDIR="${MAVEN_BASEDIR:-$(cd "$(dirname "$0")" && pwd)}"
+
+# shellcheck disable=SC2034
+MAVEN_WRAPPER_PROPERTIES="$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.properties"
+if [ -f "$MAVEN_WRAPPER_PROPERTIES" ]; then
+    MAVEN_DIST_URL=$(grep "distributionUrl" "$MAVEN_WRAPPER_PROPERTIES" | cut -d'=' -f2-)
+fi
+
+# shellcheck disable=SC2034
+MAVEN_WRAPPER_JAR="$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.jar"
+
+# Download maven-wrapper.jar if not present
+if [ ! -f "$MAVEN_WRAPPER_JAR" ]; then
+    echo "Downloading Maven Wrapper JAR..."
+    WRAPPER_URL=$(grep "wrapperUrl" "$MAVEN_WRAPPER_PROPERTIES" | cut -d'=' -f2-)
+    if [ -z "$WRAPPER_URL" ]; then
+        WRAPPER_URL="https://repo1.maven.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.3.2/maven-wrapper-3.3.2.jar"
+    fi
+    curl -s -o "$MAVEN_WRAPPER_JAR" "$WRAPPER_URL"
+fi
+
+# Find or download Maven
+if [ -z "$MAVEN_HOME" ] || ! command -v mvn >/dev/null 2>&1; then
+    if [ -z "$MAVEN_DIST_URL" ]; then
+        MAVEN_DIST_URL="https://repo1.maven.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip"
+    fi
+
+    MAVEN_HOME="$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven"
+    if [ ! -d "$MAVEN_HOME" ]; then
+        echo "Downloading Maven..."
+        TMPFILE=$(mktemp)
+        curl -s -o "$TMPFILE" "$MAVEN_DIST_URL"
+        unzip -q -o "$TMPFILE" -d "$MAVEN_PROJECTBASEDIR/.mvn/wrapper/"
+        rm -f "$TMPFILE"
+    fi
+fi
+
+# Execute Maven
+exec "$MAVEN_HOME/bin/mvn" "$@"

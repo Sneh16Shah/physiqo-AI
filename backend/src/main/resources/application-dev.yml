@@ -1,0 +1,48 @@
+# ── Development profile ─────────────────────────────────────────────────────────
+# Wired to the Docker Compose infra services (postgres, redis, minio).
+# See docs/DEPLOYMENT.md §1, root .env.example.
+
+spring:
+  # ── Datasource (PostgreSQL via Docker) ───────────────────────────────────────
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/physiqo}
+    username: ${POSTGRES_USER:physiqo}
+    password: ${POSTGRES_PASSWORD:physiqo_dev}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # No password in dev per docker-compose.yml
+
+  # ── DevTools (hot reload) ────────────────────────────────────────────────────
+  devtools:
+    restart:
+      enabled: true
+      additional-paths: src/main/java
+  livereload:
+    enabled: true
+
+# ── CORS (dev only) ─────────────────────────────────────────────────────────────
+# docs/SECURITY.md §3 — allowed-origins for dev
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+# ── Logging (readable, not JSON) ─────────────────────────────────────────────────
+logging:
+  level:
+    root: info
+    com.physiqo: debug
+    org.hibernate.SQL: debug
+
+# ── MinIO (object storage) ─────────────────────────────────────────────────────
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ROOT_USER:physiqo}
+  secret-key: ${MINIO_ROOT_PASSWORD:physiqo_dev}
+  bucket: ${MINIO_BUCKET:physiqo-uploads}
