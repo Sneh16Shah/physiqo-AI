@@ -27,7 +27,21 @@ const LoginPage: React.FC = () => {
     setApiError(null);
     try {
       const response = await authApi.login(data);
-      setAuth(response.data.token, response.data.user);
+      const resData = response.data;
+      
+      const token = resData.accessToken || resData.token;
+      const refreshToken = resData.refreshToken;
+      const user = {
+        id: resData.id || resData.userId || resData.user?.id || 'user-id',
+        email: resData.email || resData.user?.email || data.email,
+        name: resData.name || resData.user?.name || data.email.split('@')[0],
+      };
+
+      if (!token) {
+        throw new Error('No access token returned from server');
+      }
+
+      setAuth(token, user, refreshToken);
       toast.success('Welcome back!', 'Logged in successfully');
       navigate('/');
     } catch (error: any) {
