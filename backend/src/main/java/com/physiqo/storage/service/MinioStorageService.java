@@ -7,6 +7,7 @@ import com.physiqo.common.exception.ValidationException;
 import com.physiqo.storage.dto.FileResponseDto;
 import com.physiqo.storage.entity.UploadedFile;
 import com.physiqo.storage.repository.UploadedFileRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.InputStream;
@@ -42,6 +46,23 @@ public class MinioStorageService implements StorageService {
             "application/octet-stream"
     );
 
+    @PostConstruct
+    public void ensureBucketExists() {
+        try {
+            s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
+        } catch (NoSuchBucketException e) {
+            log.info("Bucket '{}' does not exist in MinIO. Creating...", bucket);
+            try {
+                s3Client.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+                log.info("Bucket '{}' created successfully.", bucket);
+            } catch (Exception createEx) {
+                log.error("Failed to create MinIO bucket '{}': {}", bucket, createEx.getMessage());
+            }
+        } catch (Exception e) {
+            log.warn("MinIO bucket status check exception: {}", e.getMessage());
+        }
+    }
+
     @Override
     @Transactional
     public FileResponseDto uploadFile(UUID userId, MultipartFile file, String category) {
@@ -63,6 +84,8 @@ public class MinioStorageService implements StorageService {
         if (!isAllowedType && !isAllowedExt) {
             throw new ValidationException("Unsupported file type: " + contentType + " (file: " + originalFilename + ")");
         }
+
+        ensureBucketExists();
 
         String objectKey = String.format("%s/%s/%s%s", userId, category.toLowerCase(), UUID.randomUUID(), ext);
 
