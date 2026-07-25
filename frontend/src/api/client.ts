@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
+import { toast } from '../stores/toastStore';
 
 const apiClient = axios.create({
   baseURL: '/api/v1',
@@ -20,15 +21,20 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const status = error.response?.status;
+
+    if ((status === 401 || status === 403) && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
         const { data } = await axios.post('/api/v1/auth/refresh');
-        useAuthStore.getState().setAuth(data.token, data.user);
-        originalRequest.headers.Authorization = `Bearer ${data.token}`;
-        return apiClient(originalRequest);
+        if (data && data.token) {
+          useAuthStore.getState().setAuth(data.token, data.user);
+          originalRequest.headers.Authorization = `Bearer ${data.token}`;
+          return apiClient(originalRequest);
+        }
       } catch (refreshError) {
         useAuthStore.getState().logout();
+        toast.error('Your session has expired. Please log in again to continue.', 'Session Expired');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
