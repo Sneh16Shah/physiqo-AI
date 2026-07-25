@@ -5,7 +5,7 @@ export const aiApi = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('reportType', reportType);
-    const response = await apiClient.post('/ai/body-comp/upload', formData, {
+    const response = await apiClient.post('/body-composition/reports/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -14,19 +14,26 @@ export const aiApi = {
   },
 
   confirmBodyCompScan: async (id: string, measurements: Record<string, any>) => {
-    const response = await apiClient.post(`/ai/body-comp/${id}/confirm`, { measurements });
+    const response = await apiClient.put(`/body-composition/reports/${id}/confirm`, {
+      reportType: 'dexa',
+      metrics: Object.entries(measurements).map(([key, val]) => ({
+        name: key,
+        value: typeof val === 'number' ? val : parseFloat(val) || 0,
+        unit: key.includes('pct') || key.includes('percent') ? '%' : 'kg'
+      }))
+    });
     return response.data;
   },
 
   analyzeProgress: async (params: Record<string, any>) => {
-    const response = await apiClient.get('/ai/progress/analyze', { params });
+    const response = await apiClient.post('/ai/analyze-progress', params);
     return response.data;
   },
 
   estimateMealPhoto: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await apiClient.post('/ai/nutrition/estimate', formData, {
+    const response = await apiClient.post('/ai/estimate-meal', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
