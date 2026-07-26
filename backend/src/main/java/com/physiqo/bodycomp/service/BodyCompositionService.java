@@ -94,7 +94,9 @@ public class BodyCompositionService {
                 .userReviewed(false)
                 .build();
 
-        if (aiResponse != null) {
+        if (aiResponse == null) {
+            log.error("AI service OCR extraction call returned null or failed for request {}", requestId);
+        } else {
             try {
                 report.setAiRawResponse(objectMapper.writeValueAsString(aiResponse));
             } catch (Exception e) {
@@ -134,6 +136,10 @@ public class BodyCompositionService {
                     }
                 }
             }
+        }
+
+        if (report.getMeasurements().isEmpty()) {
+            log.warn("AI service OCR extraction yielded 0 measurements for image request {}", requestId);
         }
 
         BodyCompositionReport saved = reportRepository.save(report);
