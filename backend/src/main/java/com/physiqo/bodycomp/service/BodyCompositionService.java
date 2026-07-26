@@ -6,6 +6,7 @@ import com.physiqo.bodycomp.entity.BodyCompositionReport;
 import com.physiqo.bodycomp.repository.BodyCompositionReportRepository;
 import com.physiqo.common.exception.ErrorCode;
 import com.physiqo.common.exception.ResourceNotFoundException;
+import com.physiqo.common.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -141,7 +142,8 @@ public class BodyCompositionService {
         }
 
         if (report.getMeasurements().isEmpty()) {
-            log.warn("AI service OCR extraction yielded 0 measurements for image request {}", requestId);
+            log.error("AI service OCR extraction yielded 0 measurements for image request {}", requestId);
+            throw new ValidationException("AI Vision extraction yielded 0 metrics. Please upload a clear photo of your body composition scale display or DEXA report.");
         }
 
         BodyCompositionReport saved = reportRepository.save(report);

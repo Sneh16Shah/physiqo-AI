@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Body
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
 from typing import Dict, Any, Optional
 import httpx
 import logging
@@ -11,20 +11,21 @@ from app.schemas.ocr import BodyCompositionExtractionResponse
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def verify_service_key():
-    pass
 
 @router.post("/scan")
-async def scan_ocr_image(
-    raw_payload: Dict[str, Any] = Body(...),
-    _: None = Depends(verify_service_key)
-):
+async def scan_ocr_image(request: Request):
     """
     Endpoint called by Spring Boot AiServiceClient: POST /api/v1/ocr/scan
     Payload: {"image_base64": "...", "mime_type": "image/jpeg"} or {"image_url": "..."}
     """
+    try:
+        raw_payload = await request.json()
+    except Exception as e:
+        logger.warning(f"Could not parse JSON body from request: {e}")
+        raw_payload = {}
+
     image_bytes = None
-    
+
     image_base64 = raw_payload.get("image_base64") or raw_payload.get("imageBase64")
     image_url = raw_payload.get("image_url") or raw_payload.get("imageUrl")
     mime_type = raw_payload.get("mime_type") or raw_payload.get("mimeType") or "image/jpeg"
@@ -44,7 +45,7 @@ async def scan_ocr_image(
     if not image_bytes and image_url:
         target_url = str(image_url).replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
         logger.info(f"Fetching image for OCR from target URL fallback: {target_url}")
-        
+
         try:
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 res = await client.get(target_url)
@@ -58,14 +59,14 @@ async def scan_ocr_image(
             logger.error(f"Error downloading image from {target_url}: {e}")
 
     pipeline = BodyCompOCRPipeline()
-    
+
     if image_bytes and len(image_bytes) > 0:
         logger.info(f"Executing OCR extraction pipeline on {len(image_bytes)} bytes (mime: {mime_type})")
         result = await pipeline.extract(image_bytes, mime_type=mime_type)
     else:
         logger.warning("No image bytes available for OCR, running fallback pipeline")
         result = await pipeline.extract(b"", mime_type="image/jpeg")
-        
+
     # Flat measurements map for Java BodyCompositionService (which checks: entry.getValue() instanceof Number)
     measurements_map: Dict[str, Any] = {}
     if result.data and result.data.measurement:
@@ -101,19 +102,17 @@ async def scan_ocr_image(
         "measurements": measurements_map
     }
 
+
 @router.post("/body-composition", response_model=StructuredResponse[BodyCompositionExtractionResponse])
-async def extract_body_composition(
-    file: UploadFile = File(...),
-    _: None = Depends(verify_service_key)
-):
+async def extract_body_composition(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-        
+
     image_bytes = await file.read()
     pipeline = BodyCompOCRPipeline()
     result = await pipeline.extract(image_bytes, mime_type=file.content_type)
-    
+
     if result.error_message:
         raise HTTPException(status_code=500, detail=result.error_message)
-        
+
     return result
