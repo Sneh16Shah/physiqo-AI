@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # AI providers (auto-detected in order: NVIDIA → Gemini → OpenAI → HuggingFace)
     AI_PROVIDER: str = "nvidia"  # "nvidia" | "gemini" | "openai" | "huggingface"
     NVIDIA_API_KEY: str = ""
-    NVIDIA_MODEL: str = "nvidia/llama-3.2-nv-vision-instruct-11b"
+    NVIDIA_MODEL: str = "meta/llama-3.2-90b-vision-instruct"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
     GEMINI_API_KEY: str = ""
