@@ -14,12 +14,14 @@ export const aiApi = {
   },
 
   confirmBodyCompScan: async (id: string, measurements: Record<string, any>) => {
+    const today = new Date().toISOString().split('T')[0];
     const response = await apiClient.put(`/body-composition/reports/${id}/confirm`, {
-      reportType: 'dexa',
-      metrics: Object.entries(measurements).map(([key, val]) => ({
-        name: key,
-        value: typeof val === 'number' ? val : parseFloat(val) || 0,
-        unit: key.includes('pct') || key.includes('percent') ? '%' : 'kg'
+      reportDate: today,
+      reportType: 'INBODY',
+      measurements: Object.entries(measurements).map(([key, val]) => ({
+        metricName: key,
+        metricValue: typeof val === 'number' ? val : parseFloat(val) || 0,
+        metricUnit: key.includes('pct') || key.includes('percent') ? '%' : (key === 'bmi' ? 'kg/m²' : (key.includes('visceral') ? 'level' : 'kg'))
       }))
     });
     return response.data;
