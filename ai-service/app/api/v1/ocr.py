@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 import httpx
 import logging
 import base64
+import json
 
 from app.pipelines.ocr.body_comp import BodyCompOCRPipeline
 from app.schemas.common import StructuredResponse
@@ -18,11 +19,14 @@ async def scan_ocr_image(request: Request):
     Endpoint called by Spring Boot AiServiceClient: POST /api/v1/ocr/scan
     Payload: {"image_base64": "...", "mime_type": "image/jpeg"} or {"image_url": "..."}
     """
-    try:
-        raw_payload = await request.json()
-    except Exception as e:
-        logger.warning(f"Could not parse JSON body from request: {e}")
-        raw_payload = {}
+    body_bytes = await request.body()
+    raw_payload = {}
+    if body_bytes:
+        try:
+            raw_payload = json.loads(body_bytes.decode("utf-8"))
+            logger.info(f"Parsed JSON payload with keys: {list(raw_payload.keys())}")
+        except Exception as e:
+            logger.warning(f"Could not parse JSON body from {len(body_bytes)} bytes: {e}")
 
     image_bytes = None
 
