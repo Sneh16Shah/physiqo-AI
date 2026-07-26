@@ -24,6 +24,7 @@ export const aiApi = {
         metricUnit: key.includes('pct') || key.includes('percent') ? '%' : (key === 'bmi' ? 'kg/m²' : (key.includes('visceral') ? 'level' : 'kg'))
       }))
     });
+    console.log("body scan confirm response", response);
     return response.data;
   },
 

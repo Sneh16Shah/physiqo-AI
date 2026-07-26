@@ -71,20 +71,28 @@ public class BodyCompositionService {
 
     @Transactional
     public BodyCompReportDto uploadAndExtractReport(UUID userId, MultipartFile file) {
-        FileResponseDto fileInfo = storageService.uploadFile(userId, file, "BODYCOMP");
+        byte[] fileBytes = null;
+        try {
+            fileBytes = file.getBytes();
+        } catch (Exception e) {
+            log.warn("Failed to read bytes from uploaded multipart file: {}", e.getMessage());
+        }
+
+        FileResponseDto fileInfo = storageService.uploadFile(userId, file, "BODY_COMP");
         UUID requestId = UUID.randomUUID();
         
         Map<String, Object> aiResponse = null;
         double confidence = 0.85;
         try {
-            String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+            String base64Image = (fileBytes != null && fileBytes.length > 0) ? java.util.Base64.getEncoder().encodeToString(fileBytes) : null;
             String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
             aiResponse = aiServiceClient.extractBodyComposition(requestId, base64Image, mimeType, fileInfo.getUrl());
+            log.info("AI service OCR extraction response for request {}: {}", requestId, aiResponse);
             if (aiResponse != null) {
                 confidence = aiResponseValidator.extractConfidence(aiResponse);
             }
         } catch (Exception e) {
-            log.error("AI service OCR extraction call failed, proceeding with uploaded document report", e);
+            log.error("AI service OCR extraction call failed", e);
         }
 
         BodyCompositionReport report = BodyCompositionReport.builder()

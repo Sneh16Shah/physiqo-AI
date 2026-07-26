@@ -23,7 +23,13 @@ public class AiServiceClient {
         if (cleanBaseUrl.endsWith("/")) {
             cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
         }
-        this.restClient = restClientBuilder.baseUrl(cleanBaseUrl).build();
+        org.springframework.http.client.JdkClientHttpRequestFactory requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory();
+        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(90));
+
+        this.restClient = restClientBuilder
+                .requestFactory(requestFactory)
+                .baseUrl(cleanBaseUrl)
+                .build();
         this.serviceKey = serviceKey;
     }
 
