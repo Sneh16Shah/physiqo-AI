@@ -30,19 +30,20 @@ class BodyCompOCRPipeline:
             gemini_key = os.environ.get("GEMINI_API_KEY") or settings.GEMINI_API_KEY
             openai_key = os.environ.get("OPENAI_API_KEY") or settings.OPENAI_API_KEY
             
-            if gemini_key:
+            if gemini_key and gemini_key not in ("", "sk-replace-me"):
                 logger.info("Using GeminiProvider for BodyComp OCR")
                 self.provider = GeminiProvider(api_key=gemini_key)
-            elif openai_key:
+            elif openai_key and openai_key not in ("", "sk-replace-me"):
                 logger.info("Using OpenAIProvider for BodyComp OCR")
                 self.provider = OpenAIProvider(api_key=openai_key)
             else:
-                logger.warning("No Vision AI API keys configured (GEMINI_API_KEY or OPENAI_API_KEY missing). Falling back to local Tesseract OCR Engine.")
+                logger.warning("No Vision AI API keys configured. Using local Tesseract OCR Engine only.")
                 self.provider = None
 
     def _extract_with_tesseract(self, image_bytes: bytes) -> BodyCompositionMeasurementExtracted:
         extracted = BodyCompositionMeasurementExtracted()
         if not pytesseract or not image_bytes:
+            logger.warning("Tesseract not available or no image bytes provided")
             return extracted
 
         try:
@@ -98,10 +99,11 @@ class BodyCompOCRPipeline:
             return extracted
 
     async def extract(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> StructuredResponse[BodyCompositionExtractionResponse]:
-        try:
-            processed_bytes = ImagePreprocessor.process(image_bytes) if image_bytes else b""
-            
-            if self.provider and processed_bytes:
+        processed_bytes = ImagePreprocessor.process(image_bytes) if image_bytes else b""
+        
+        # --- Attempt 1: Cloud Vision AI (Gemini / OpenAI) ---
+        if self.provider and processed_bytes:
+            try:
                 prompt = (
                     "Extract body composition measurements from this scale / monitor display image.\n"
                     "Extract values for:\n"
@@ -132,13 +134,17 @@ class BodyCompOCRPipeline:
                 )
                 
                 category = calculate_confidence_category(result.confidence)
+                logger.info(f"Cloud Vision AI extraction succeeded with confidence {result.confidence}")
                 return StructuredResponse(
                     data=result,
                     confidence_score=result.confidence,
                     confidence_category=category
                 )
-            
-            # Local Tesseract OCR fallback when no API key is present
+            except Exception as e:
+                logger.error(f"Cloud Vision AI extraction failed: {e}. Falling back to local Tesseract OCR...")
+        
+        # --- Attempt 2: Local Tesseract OCR fallback ---
+        if processed_bytes:
             logger.info("Executing local Tesseract OCR engine on image...")
             tess_extracted = self._extract_with_tesseract(processed_bytes)
             
@@ -146,16 +152,21 @@ class BodyCompOCRPipeline:
             conf_score = 0.85 if has_data else 0.50
             conf_cat = "high" if has_data else "medium"
             
+            if has_data:
+                logger.info(f"Tesseract OCR extracted data: {tess_extracted.model_dump(exclude_none=True)}")
+            else:
+                logger.warning("Tesseract OCR could not extract any values from the image")
+            
             response = BodyCompositionExtractionResponse(measurement=tess_extracted, confidence=conf_score)
             return StructuredResponse(data=response, confidence_score=conf_score, confidence_category=conf_cat)
 
-        except Exception as e:
-            logger.error(f"OCR Extraction pipeline error: {e}", exc_info=True)
-            extracted = BodyCompositionMeasurementExtracted()
-            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.30)
-            return StructuredResponse(
-                data=response,
-                confidence_score=0.30,
-                confidence_category="low",
-                error_message=str(e)
-            )
+        # --- No image provided at all ---
+        logger.error("No image bytes provided for OCR extraction")
+        extracted = BodyCompositionMeasurementExtracted()
+        response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
+        return StructuredResponse(
+            data=response,
+            confidence_score=0.0,
+            confidence_category="none",
+            error_message="No image provided for extraction"
+        )
