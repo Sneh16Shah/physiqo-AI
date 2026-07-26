@@ -19,6 +19,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.PutBucketPolicyRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.InputStream;
@@ -50,16 +51,43 @@ public class MinioStorageService implements StorageService {
     public void ensureBucketExists() {
         try {
             s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
+            setBucketPublicPolicy();
         } catch (NoSuchBucketException e) {
             log.info("Bucket '{}' does not exist in MinIO. Creating...", bucket);
             try {
                 s3Client.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+                setBucketPublicPolicy();
                 log.info("Bucket '{}' created successfully.", bucket);
             } catch (Exception createEx) {
                 log.error("Failed to create MinIO bucket '{}': {}", bucket, createEx.getMessage());
             }
         } catch (Exception e) {
             log.warn("MinIO bucket status check exception: {}", e.getMessage());
+        }
+    }
+
+    private void setBucketPublicPolicy() {
+        try {
+            String policyJson = """
+                    {
+                      "Version": "2012-10-17",
+                      "Statement": [
+                        {
+                          "Effect": "Allow",
+                          "Principal": "*",
+                          "Action": ["s3:GetObject"],
+                          "Resource": ["arn:aws:s3:::%s/*"]
+                        }
+                      ]
+                    }
+                    """.formatted(bucket);
+            s3Client.putBucketPolicy(PutBucketPolicyRequest.builder()
+                    .bucket(bucket)
+                    .policy(policyJson)
+                    .build());
+            log.info("Set public read policy on MinIO bucket '{}'", bucket);
+        } catch (Exception e) {
+            log.warn("Failed to set public policy on bucket '{}': {}", bucket, e.getMessage());
         }
     }
 
