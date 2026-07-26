@@ -17,11 +17,15 @@ interface ExtractionReviewProps {
 
 const DEFAULT_METRICS: MeasurementItem[] = [
   { name: 'weight', label: 'Body Weight', value: '', unit: 'kg', confidence: 0.9 },
+  { name: 'body_fat_mass', label: 'Body Fat Mass', value: '', unit: 'kg', confidence: 0.85 },
   { name: 'body_fat_pct', label: 'Body Fat Percentage', value: '', unit: '%', confidence: 0.85 },
   { name: 'skeletal_muscle_mass', label: 'Skeletal Muscle Mass', value: '', unit: 'kg', confidence: 0.85 },
+  { name: 'fat_free_mass', label: 'Fat-Free Mass / Remove Fat', value: '', unit: 'kg', confidence: 0.8 },
+  { name: 'water_content', label: 'Water Content', value: '', unit: 'kg', confidence: 0.85 },
+  { name: 'protein', label: 'Protein', value: '', unit: 'kg', confidence: 0.85 },
+  { name: 'inorganic_salt', label: 'Inorganic Salt', value: '', unit: 'kg', confidence: 0.85 },
   { name: 'bmi', label: 'BMI (Body Mass Index)', value: '', unit: 'kg/m²', confidence: 0.9 },
   { name: 'visceral_fat_level', label: 'Visceral Fat Level', value: '', unit: 'level', confidence: 0.8 },
-  { name: 'fat_free_mass', label: 'Fat-Free Mass', value: '', unit: 'kg', confidence: 0.8 },
 ];
 
 export const ExtractionReview: React.FC<ExtractionReviewProps> = ({ data, onConfirm, onCancel, isSaving }) => {
@@ -39,7 +43,14 @@ export const ExtractionReview: React.FC<ExtractionReviewProps> = ({ data, onConf
           const nameStr: string = String(m.metricName || m.name || 'metric');
           const labelStr: string = formatLabel(nameStr);
           const val: number | string = (m.metricValue ?? m.value ?? '') as (number | string);
-          const unitStr: string = String(m.metricUnit || m.unit || 'kg');
+          let unitStr: string = String(m.metricUnit || m.unit || 'kg');
+          if (nameStr.includes('pct') || nameStr.includes('percent')) {
+            unitStr = '%';
+          } else if (nameStr === 'bmi') {
+            unitStr = 'kg/m²';
+          } else if (nameStr.includes('visceral')) {
+            unitStr = 'level';
+          }
           const confNum: number = typeof m.confidence === 'number' ? m.confidence : defaultConfidence;
 
           parsedItems.push({
@@ -59,7 +70,14 @@ export const ExtractionReview: React.FC<ExtractionReviewProps> = ({ data, onConf
 
           if (val && typeof val === 'object') {
             const vNum: number | string = (val.value ?? '') as (number | string);
-            const uStr: string = String(val.unit || 'kg');
+            let uStr: string = String(val.unit || 'kg');
+            if (nameStr.includes('pct') || nameStr.includes('percent')) {
+              uStr = '%';
+            } else if (nameStr === 'bmi') {
+              uStr = 'kg/m²';
+            } else if (nameStr.includes('visceral')) {
+              uStr = 'level';
+            }
             const cNum: number = typeof val.confidence === 'number' ? val.confidence : defaultConfidence;
             parsedItems.push({
               name: nameStr,
@@ -70,7 +88,14 @@ export const ExtractionReview: React.FC<ExtractionReviewProps> = ({ data, onConf
             });
           } else {
             const vNum: number | string = (val ?? '') as (number | string);
-            const uStr: string = nameStr.includes('pct') || nameStr.includes('percent') || nameStr.includes('fat') ? '%' : 'kg';
+            let uStr = 'kg';
+            if (nameStr.includes('pct') || nameStr.includes('percent')) {
+              uStr = '%';
+            } else if (nameStr === 'bmi') {
+              uStr = 'kg/m²';
+            } else if (nameStr.includes('visceral')) {
+              uStr = 'level';
+            }
             parsedItems.push({
               name: nameStr,
               label: labelStr,
@@ -87,21 +112,7 @@ export const ExtractionReview: React.FC<ExtractionReviewProps> = ({ data, onConf
     if (parsedItems.length === 0) {
       setItems([...DEFAULT_METRICS]);
     } else {
-      // Ensure missing key default fields are available if not present
-      const existingNames = new Set<string>(parsedItems.map(i => i.name.toLowerCase()));
-      const defaultsToAdd: MeasurementItem[] = [];
-      for (const d of DEFAULT_METRICS) {
-        if (!existingNames.has(d.name.toLowerCase())) {
-          defaultsToAdd.push({
-            name: String(d.name),
-            label: String(d.label),
-            value: d.value,
-            unit: String(d.unit),
-            confidence: defaultConfidence,
-          });
-        }
-      }
-      setItems([...parsedItems, ...defaultsToAdd]);
+      setItems([...parsedItems]);
     }
   }, [data]);
 
