@@ -76,7 +76,9 @@ public class BodyCompositionService {
         Map<String, Object> aiResponse = null;
         double confidence = 0.85;
         try {
-            aiResponse = aiServiceClient.extractBodyComposition(requestId, fileInfo.getUrl());
+            String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+            String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+            aiResponse = aiServiceClient.extractBodyComposition(requestId, base64Image, mimeType, fileInfo.getUrl());
             if (aiResponse != null) {
                 confidence = aiResponseValidator.extractConfidence(aiResponse);
             }

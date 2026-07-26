@@ -19,8 +19,9 @@ class BodyCompositionExtractionResponse(BaseModel):
     confidence: float = Field(0.85, description="Estimated confidence score between 0.0 and 1.0")
 
 class OcrScanRequest(BaseModel):
+    image_base64: Optional[str] = Field(None, alias="imageBase64")
     image_url: Optional[str] = Field(None, alias="imageUrl")
-    imageUrl: Optional[str] = None
+    mime_type: Optional[str] = Field("image/jpeg", alias="mimeType")
 
     class Config:
         populate_by_name = True

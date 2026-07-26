@@ -5,6 +5,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -51,13 +52,24 @@ public class AiServiceClient {
     }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> extractBodyComposition(UUID requestId, String imageUrl) {
+    public Map<String, Object> extractBodyComposition(UUID requestId, String imageBase64, String mimeType, String imageUrl) {
+        Map<String, String> payload = new HashMap<>();
+        if (imageBase64 != null && !imageBase64.isBlank()) {
+            payload.put("image_base64", imageBase64);
+        }
+        if (mimeType != null && !mimeType.isBlank()) {
+            payload.put("mime_type", mimeType);
+        }
+        if (imageUrl != null && !imageUrl.isBlank()) {
+            payload.put("image_url", imageUrl);
+        }
+
         return restClient.post()
                 .uri("/api/v1/ocr/scan")
                 .header("X-Service-Key", serviceKey)
                 .header("X-Request-Id", requestId.toString())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("image_url", imageUrl))
+                .body(payload)
                 .retrieve()
                 .body(Map.class);
     }

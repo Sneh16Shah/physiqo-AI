@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Body
 from typing import Dict, Any, Optional
 import httpx
 import logging
+import base64
 
 from app.pipelines.ocr.body_comp import BodyCompOCRPipeline
 from app.schemas.common import StructuredResponse
@@ -20,35 +21,47 @@ async def scan_ocr_image(
 ):
     """
     Endpoint called by Spring Boot AiServiceClient: POST /api/v1/ocr/scan
-    Payload: {"image_url": "http://localhost:9000/physiqo-uploads/..."}
+    Payload: {"image_base64": "...", "mime_type": "image/jpeg"} or {"image_url": "..."}
     """
     image_bytes = None
     mime_type = "image/jpeg"
     
-    url_to_fetch = ""
     if payload:
-        url_to_fetch = payload.image_url or payload.imageUrl or ""
+        if payload.mime_type:
+            mime_type = payload.mime_type
+            
+        if payload.image_base64:
+            try:
+                raw_b64 = payload.image_base64
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                image_bytes = base64.b64decode(raw_b64)
+                logger.info(f"Successfully decoded Base64 image payload ({len(image_bytes)} bytes)")
+            except Exception as e:
+                logger.error(f"Failed to decode Base64 image payload: {e}")
 
-    if url_to_fetch:
-        # Resolve internal Docker network hostname for MinIO
-        target_url = url_to_fetch.replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
-        logger.info(f"Fetching image for OCR from target URL: {target_url} (original: {url_to_fetch})")
-        
-        try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                res = await client.get(target_url)
-                if res.status_code == 200:
-                    image_bytes = res.content
-                    mime_type = res.headers.get("content-type", "image/jpeg")
-                    logger.info(f"Successfully downloaded image for OCR ({len(image_bytes)} bytes)")
-                else:
-                    logger.warning(f"Failed to fetch image from URL {target_url}: HTTP {res.status_code}")
-        except Exception as e:
-            logger.error(f"Error downloading image from {target_url}: {e}")
+        url_to_fetch = payload.image_url or payload.imageUrl or ""
+        if not image_bytes and url_to_fetch:
+            # Resolve internal Docker network hostname for MinIO fallback
+            target_url = url_to_fetch.replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
+            logger.info(f"Fetching image for OCR from target URL fallback: {target_url}")
+            
+            try:
+                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                    res = await client.get(target_url)
+                    if res.status_code == 200:
+                        image_bytes = res.content
+                        mime_type = res.headers.get("content-type", mime_type)
+                        logger.info(f"Successfully downloaded image for OCR ({len(image_bytes)} bytes)")
+                    else:
+                        logger.warning(f"Failed to fetch image from URL {target_url}: HTTP {res.status_code}")
+            except Exception as e:
+                logger.error(f"Error downloading image from {target_url}: {e}")
 
     pipeline = BodyCompOCRPipeline()
     
     if image_bytes:
+        logger.info(f"Executing OCR extraction pipeline on {len(image_bytes)} bytes (mime: {mime_type})")
         result = await pipeline.extract(image_bytes, mime_type=mime_type)
     else:
         # Fallback if image download failed
@@ -81,6 +94,8 @@ async def scan_ocr_image(
             measurements_map["bmi"] = m.bmi
         if m.visceral_fat_level is not None:
             measurements_map["visceral_fat_level"] = m.visceral_fat_level
+
+    logger.info(f"OCR extraction finished with {len(measurements_map)} metrics extracted: {measurements_map}")
 
     return {
         "confidence": result.confidence_score,
