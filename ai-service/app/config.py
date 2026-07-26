@@ -28,12 +28,17 @@ class Settings(BaseSettings):
     # CORS
     CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:8080"]
 
-    # AI providers
-    AI_PROVIDER: str = "openai"  # "openai" | "gemini"
+    # AI providers (auto-detected in order: NVIDIA → Gemini → OpenAI → HuggingFace)
+    AI_PROVIDER: str = "nvidia"  # "nvidia" | "gemini" | "openai" | "huggingface"
+    NVIDIA_API_KEY: str = ""
+    NVIDIA_MODEL: str = "nvidia/llama-3.2-nv-vision-instruct-11b"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
+    HF_TOKEN: str = ""
+    HUGGINGFACE_API_KEY: str = ""
+    HF_MODEL: str = "meta-llama/Llama-3.2-11b-vision-instruct"
 
     # MinIO / S3
     MINIO_ENDPOINT: str = "http://localhost:9000"

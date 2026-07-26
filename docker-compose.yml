@@ -111,8 +111,10 @@ services:
       - "8000:8000"
     environment:
       SERVICE_KEY: ${AI_SERVICE_KEY:-dev-service-key}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
     networks:
       - physiqo-net
 

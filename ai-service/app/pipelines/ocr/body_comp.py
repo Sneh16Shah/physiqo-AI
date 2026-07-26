@@ -1,18 +1,12 @@
 import logging
 import os
-import io
-import re
-from typing import Dict, Any, Optional
-
-from PIL import Image
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None
+from typing import Optional
 
 from app.core.ai_provider import AIProvider
 from app.core.openai_provider import OpenAIProvider
 from app.core.gemini_provider import GeminiProvider
+from app.core.huggingface_provider import HuggingFaceProvider
+from app.core.nvidia_provider import NvidiaProvider
 from app.schemas.ocr import BodyCompositionExtractionResponse, BodyCompositionMeasurementExtracted
 from app.schemas.common import StructuredResponse
 from app.core.confidence import calculate_confidence_category
@@ -21,152 +15,109 @@ from .preprocessor import ImagePreprocessor
 
 logger = logging.getLogger(__name__)
 
+SKIP_VALUES = {"", "sk-replace-me", "hf-replace-me", "nvapi-replace-me"}
+
+
 class BodyCompOCRPipeline:
-    def __init__(self, provider: Optional[AIProvider] = None):
+    def __init__(self, provider: Optional[AIProvider] = None, model_name: Optional[str] = None):
+        self.model_name = model_name
         if provider:
             self.provider = provider
         else:
-            # Auto-detect available provider based on API keys
-            gemini_key = os.environ.get("GEMINI_API_KEY") or settings.GEMINI_API_KEY
-            openai_key = os.environ.get("OPENAI_API_KEY") or settings.OPENAI_API_KEY
-            
-            if gemini_key and gemini_key not in ("", "sk-replace-me"):
-                logger.info("Using GeminiProvider for BodyComp OCR")
-                self.provider = GeminiProvider(api_key=gemini_key)
-            elif openai_key and openai_key not in ("", "sk-replace-me"):
-                logger.info("Using OpenAIProvider for BodyComp OCR")
-                self.provider = OpenAIProvider(api_key=openai_key)
-            else:
-                logger.warning("No Vision AI API keys configured. Using local Tesseract OCR Engine only.")
-                self.provider = None
+            self.provider = None
+            # Auto-detect provider from environment variables (priority order)
+            providers = [
+                ("NVIDIA_API_KEY", "nvidia", lambda k: NvidiaProvider(api_key=k), settings.NVIDIA_MODEL),
+                ("GEMINI_API_KEY", "gemini", lambda k: GeminiProvider(api_key=k), settings.GEMINI_MODEL),
+                ("OPENAI_API_KEY", "openai", lambda k: OpenAIProvider(api_key=k), settings.OPENAI_MODEL),
+                ("HF_TOKEN", "huggingface", lambda k: HuggingFaceProvider(api_key=k), settings.HF_MODEL),
+                ("HUGGINGFACE_API_KEY", "huggingface", lambda k: HuggingFaceProvider(api_key=k), settings.HF_MODEL),
+            ]
 
-    def _extract_with_tesseract(self, image_bytes: bytes) -> BodyCompositionMeasurementExtracted:
-        extracted = BodyCompositionMeasurementExtracted()
-        if not pytesseract or not image_bytes:
-            logger.warning("Tesseract not available or no image bytes provided")
-            return extracted
+            for env_var, name, factory, default_model in providers:
+                key = os.environ.get(env_var, "") or getattr(settings, env_var, "")
+                if key and key.strip() not in SKIP_VALUES:
+                    logger.info(f"✅ Using {name} provider for BodyComp OCR (env: {env_var}, model: {default_model})")
+                    self.provider = factory(key.strip())
+                    if not self.model_name:
+                        self.model_name = default_model
+                    break
 
-        try:
-            img = Image.open(io.BytesIO(image_bytes))
-            raw_text = pytesseract.image_to_string(img)
-            logger.info(f"Local Tesseract OCR extracted raw text:\n{raw_text}")
-
-            lines = raw_text.split('\n')
-            for line in lines:
-                line_str = line.strip()
-                if not line_str:
-                    continue
-
-                # Weight (72.2kg)
-                if re.search(r'weight', line_str, re.IGNORECASE) and extracted.weight_kg is None:
-                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
-                    if m:
-                        extracted.weight_kg = float(m.group(1))
-
-                # Body fat (15.0kg or %)
-                elif re.search(r'body\s*fat', line_str, re.IGNORECASE) and extracted.body_fat_kg is None:
-                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
-                    if m:
-                        extracted.body_fat_kg = float(m.group(1))
-
-                # Remove fat / Fat-free mass (57.2kg)
-                elif re.search(r'remove\s*fat|fat\s*free', line_str, re.IGNORECASE) and extracted.fat_free_mass_kg is None:
-                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
-                    if m:
-                        extracted.fat_free_mass_kg = float(m.group(1))
-
-                # Water content (40.8kg)
-                elif re.search(r'water', line_str, re.IGNORECASE) and extracted.water_content_kg is None:
-                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
-                    if m:
-                        extracted.water_content_kg = float(m.group(1))
-
-                # Protein (13.0kg)
-                elif re.search(r'protein', line_str, re.IGNORECASE) and extracted.protein_kg is None:
-                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
-                    if m:
-                        extracted.protein_kg = float(m.group(1))
-
-                # Inorganic salt (3.31kg)
-                elif re.search(r'salt|inorganic', line_str, re.IGNORECASE) and extracted.inorganic_salt_kg is None:
-                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
-                    if m:
-                        extracted.inorganic_salt_kg = float(m.group(1))
-
-            return extracted
-        except Exception as e:
-            logger.error(f"Tesseract OCR execution error: {e}")
-            return extracted
+            if not self.provider:
+                logger.error(
+                    "❌ NO AI provider configured! Set one of: NVIDIA_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, HF_TOKEN. "
+                    "Image extraction will NOT work."
+                )
 
     async def extract(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> StructuredResponse[BodyCompositionExtractionResponse]:
         processed_bytes = ImagePreprocessor.process(image_bytes) if image_bytes else b""
-        
-        # --- Attempt 1: Cloud Vision AI (Gemini / OpenAI) ---
-        if self.provider and processed_bytes:
-            try:
-                prompt = (
-                    "Extract body composition measurements from this scale / monitor display image.\n"
-                    "Extract values for:\n"
-                    "- Weight (kg)\n"
-                    "- Body fat (kg or %)\n"
-                    "- Remove fat / Fat-free mass / Lean mass (kg)\n"
-                    "- Water content / Moisture (kg or %)\n"
-                    "- Protein (kg)\n"
-                    "- Inorganic salt / Bone mineral (kg)\n"
-                    "- BMI\n"
-                    "- Visceral fat level\n"
-                    "Look carefully at tables and digital screen numbers."
-                )
-                system_prompt = (
-                    "You are a medical OCR specialist. Extract body composition scale screen numbers accurately. "
-                    "Only extract numbers that are clearly visible."
-                )
 
-                model_name = settings.GEMINI_MODEL if isinstance(self.provider, GeminiProvider) else settings.OPENAI_MODEL
-                
-                result = await self.provider.extract_structured(
-                    model_name=model_name,
-                    prompt=prompt,
-                    response_model=BodyCompositionExtractionResponse,
-                    image_bytes=processed_bytes,
-                    image_mime_type=mime_type,
-                    system_prompt=system_prompt
-                )
-                
-                category = calculate_confidence_category(result.confidence)
-                logger.info(f"Cloud Vision AI extraction succeeded with confidence {result.confidence}")
-                return StructuredResponse(
-                    data=result,
-                    confidence_score=result.confidence,
-                    confidence_category=category
-                )
-            except Exception as e:
-                logger.error(f"Cloud Vision AI extraction failed: {e}. Falling back to local Tesseract OCR...")
-        
-        # --- Attempt 2: Local Tesseract OCR fallback ---
-        if processed_bytes:
-            logger.info("Executing local Tesseract OCR engine on image...")
-            tess_extracted = self._extract_with_tesseract(processed_bytes)
-            
-            has_data = any(v is not None for v in tess_extracted.model_dump().values())
-            conf_score = 0.85 if has_data else 0.50
-            conf_cat = "high" if has_data else "medium"
-            
-            if has_data:
-                logger.info(f"Tesseract OCR extracted data: {tess_extracted.model_dump(exclude_none=True)}")
-            else:
-                logger.warning("Tesseract OCR could not extract any values from the image")
-            
-            response = BodyCompositionExtractionResponse(measurement=tess_extracted, confidence=conf_score)
-            return StructuredResponse(data=response, confidence_score=conf_score, confidence_category=conf_cat)
+        if not self.provider:
+            logger.error("No AI provider available. Cannot extract body composition data.")
+            extracted = BodyCompositionMeasurementExtracted()
+            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
+            return StructuredResponse(
+                data=response,
+                confidence_score=0.0,
+                confidence_category="none",
+                error_message="No AI provider configured. Set NVIDIA_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or HF_TOKEN."
+            )
 
-        # --- No image provided at all ---
-        logger.error("No image bytes provided for OCR extraction")
-        extracted = BodyCompositionMeasurementExtracted()
-        response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
-        return StructuredResponse(
-            data=response,
-            confidence_score=0.0,
-            confidence_category="none",
-            error_message="No image provided for extraction"
+        if not processed_bytes:
+            logger.error("No image bytes provided for OCR extraction")
+            extracted = BodyCompositionMeasurementExtracted()
+            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
+            return StructuredResponse(
+                data=response,
+                confidence_score=0.0,
+                confidence_category="none",
+                error_message="No image provided for extraction"
+            )
+
+        prompt = (
+            "Extract body composition measurements from this scale / monitor display image.\n"
+            "Extract values for:\n"
+            "- Weight (kg)\n"
+            "- Body fat (kg or %)\n"
+            "- Remove fat / Fat-free mass / Lean mass (kg)\n"
+            "- Body fat percentage (%)\n"
+            "- Water content / Moisture (kg or %)\n"
+            "- Protein (kg)\n"
+            "- Inorganic salt / Bone mineral (kg)\n"
+            "- BMI\n"
+            "- Visceral fat level\n"
+            "Look carefully at tables and digital screen numbers."
         )
+        system_prompt = (
+            "You are a medical OCR specialist. Extract body composition scale screen numbers accurately. "
+            "Only extract numbers that are clearly visible."
+        )
+
+        try:
+            result = await self.provider.extract_structured(
+                model_name=self.model_name,
+                prompt=prompt,
+                response_model=BodyCompositionExtractionResponse,
+                image_bytes=processed_bytes,
+                image_mime_type=mime_type,
+                system_prompt=system_prompt
+            )
+
+            category = calculate_confidence_category(result.confidence)
+            logger.info(f"✅ AI extraction succeeded: confidence={result.confidence}, data={result.measurement.model_dump(exclude_none=True)}")
+            return StructuredResponse(
+                data=result,
+                confidence_score=result.confidence,
+                confidence_category=category
+            )
+
+        except Exception as e:
+            logger.error(f"❌ AI extraction failed: {e}", exc_info=True)
+            extracted = BodyCompositionMeasurementExtracted()
+            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
+            return StructuredResponse(
+                data=response,
+                confidence_score=0.0,
+                confidence_category="none",
+                error_message=f"AI extraction failed: {str(e)}"
+            )
