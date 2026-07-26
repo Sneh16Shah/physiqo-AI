@@ -1,7 +1,14 @@
 import logging
 import os
-import json
+import io
+import re
 from typing import Dict, Any, Optional
+
+from PIL import Image
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
 
 from app.core.ai_provider import AIProvider
 from app.core.openai_provider import OpenAIProvider
@@ -30,14 +37,71 @@ class BodyCompOCRPipeline:
                 logger.info("Using OpenAIProvider for BodyComp OCR")
                 self.provider = OpenAIProvider(api_key=openai_key)
             else:
-                logger.warning("No AI API keys configured (GEMINI_API_KEY or OPENAI_API_KEY missing)")
+                logger.warning("No Vision AI API keys configured (GEMINI_API_KEY or OPENAI_API_KEY missing). Falling back to local Tesseract OCR Engine.")
                 self.provider = None
+
+    def _extract_with_tesseract(self, image_bytes: bytes) -> BodyCompositionMeasurementExtracted:
+        extracted = BodyCompositionMeasurementExtracted()
+        if not pytesseract or not image_bytes:
+            return extracted
+
+        try:
+            img = Image.open(io.BytesIO(image_bytes))
+            raw_text = pytesseract.image_to_string(img)
+            logger.info(f"Local Tesseract OCR extracted raw text:\n{raw_text}")
+
+            lines = raw_text.split('\n')
+            for line in lines:
+                line_str = line.strip()
+                if not line_str:
+                    continue
+
+                # Weight (72.2kg)
+                if re.search(r'weight', line_str, re.IGNORECASE) and extracted.weight_kg is None:
+                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
+                    if m:
+                        extracted.weight_kg = float(m.group(1))
+
+                # Body fat (15.0kg or %)
+                elif re.search(r'body\s*fat', line_str, re.IGNORECASE) and extracted.body_fat_kg is None:
+                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
+                    if m:
+                        extracted.body_fat_kg = float(m.group(1))
+
+                # Remove fat / Fat-free mass (57.2kg)
+                elif re.search(r'remove\s*fat|fat\s*free', line_str, re.IGNORECASE) and extracted.fat_free_mass_kg is None:
+                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
+                    if m:
+                        extracted.fat_free_mass_kg = float(m.group(1))
+
+                # Water content (40.8kg)
+                elif re.search(r'water', line_str, re.IGNORECASE) and extracted.water_content_kg is None:
+                    m = re.search(r'(\d{2,3}\.?\d*)', line_str)
+                    if m:
+                        extracted.water_content_kg = float(m.group(1))
+
+                # Protein (13.0kg)
+                elif re.search(r'protein', line_str, re.IGNORECASE) and extracted.protein_kg is None:
+                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
+                    if m:
+                        extracted.protein_kg = float(m.group(1))
+
+                # Inorganic salt (3.31kg)
+                elif re.search(r'salt|inorganic', line_str, re.IGNORECASE) and extracted.inorganic_salt_kg is None:
+                    m = re.search(r'(\d{1,2}\.?\d*)', line_str)
+                    if m:
+                        extracted.inorganic_salt_kg = float(m.group(1))
+
+            return extracted
+        except Exception as e:
+            logger.error(f"Tesseract OCR execution error: {e}")
+            return extracted
 
     async def extract(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> StructuredResponse[BodyCompositionExtractionResponse]:
         try:
-            processed_bytes = ImagePreprocessor.process(image_bytes)
+            processed_bytes = ImagePreprocessor.process(image_bytes) if image_bytes else b""
             
-            if self.provider:
+            if self.provider and processed_bytes:
                 prompt = (
                     "Extract body composition measurements from this scale / monitor display image.\n"
                     "Extract values for:\n"
@@ -74,17 +138,16 @@ class BodyCompOCRPipeline:
                     confidence_category=category
                 )
             
-            # Fallback if no AI key configured: return empty struct with lower confidence
-            logger.info("Returning standard extraction template for manual user review")
-            extracted = BodyCompositionMeasurementExtracted(
-                weight_kg=None,
-                body_fat_percentage=None,
-                muscle_mass_kg=None,
-                water_percentage=None,
-                bmi=None
-            )
-            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.50)
-            return StructuredResponse(data=response, confidence_score=0.50, confidence_category="medium")
+            # Local Tesseract OCR fallback when no API key is present
+            logger.info("Executing local Tesseract OCR engine on image...")
+            tess_extracted = self._extract_with_tesseract(processed_bytes)
+            
+            has_data = any(v is not None for v in tess_extracted.model_dump().values())
+            conf_score = 0.85 if has_data else 0.50
+            conf_cat = "high" if has_data else "medium"
+            
+            response = BodyCompositionExtractionResponse(measurement=tess_extracted, confidence=conf_score)
+            return StructuredResponse(data=response, confidence_score=conf_score, confidence_category=conf_cat)
 
         except Exception as e:
             logger.error(f"OCR Extraction pipeline error: {e}", exc_info=True)
