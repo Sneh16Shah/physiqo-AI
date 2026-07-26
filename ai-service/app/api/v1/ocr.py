@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Body
 from typing import Dict, Any, Optional
 import httpx
 import logging
@@ -15,7 +15,7 @@ def verify_service_key():
 
 @router.post("/scan")
 async def scan_ocr_image(
-    payload: OcrScanRequest,
+    payload: Optional[OcrScanRequest] = Body(None),
     _: None = Depends(verify_service_key)
 ):
     """
@@ -25,10 +25,14 @@ async def scan_ocr_image(
     image_bytes = None
     mime_type = "image/jpeg"
     
-    if payload.image_url:
+    url_to_fetch = ""
+    if payload:
+        url_to_fetch = payload.image_url or payload.imageUrl or ""
+
+    if url_to_fetch:
         # Resolve internal Docker network hostname for MinIO
-        target_url = payload.image_url.replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
-        logger.info(f"Fetching image for OCR from target URL: {target_url} (original: {payload.image_url})")
+        target_url = url_to_fetch.replace("localhost:9000", "minio:9000").replace("127.0.0.1:9000", "minio:9000")
+        logger.info(f"Fetching image for OCR from target URL: {target_url} (original: {url_to_fetch})")
         
         try:
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
