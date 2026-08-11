@@ -16,6 +16,7 @@ public class BodyTapeMeasurementRequest {
     private BigDecimal neckCm;
     private BigDecimal chestCm;
     private BigDecimal waistCm;
+    private BigDecimal bellyCm;
     private BigDecimal hipsCm;
     private BigDecimal leftBicepCm;
     private BigDecimal rightBicepCm;

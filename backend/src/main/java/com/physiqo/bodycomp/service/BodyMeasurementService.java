@@ -30,6 +30,7 @@ public class BodyMeasurementService {
                 .neckCm(request.getNeckCm())
                 .chestCm(request.getChestCm())
                 .waistCm(request.getWaistCm())
+                .bellyCm(request.getBellyCm())
                 .hipsCm(request.getHipsCm())
                 .leftBicepCm(request.getLeftBicepCm())
                 .rightBicepCm(request.getRightBicepCm())
@@ -74,6 +75,7 @@ public class BodyMeasurementService {
         if (request.getNeckCm() != null) m.setNeckCm(request.getNeckCm());
         if (request.getChestCm() != null) m.setChestCm(request.getChestCm());
         if (request.getWaistCm() != null) m.setWaistCm(request.getWaistCm());
+        if (request.getBellyCm() != null) m.setBellyCm(request.getBellyCm());
         if (request.getHipsCm() != null) m.setHipsCm(request.getHipsCm());
         if (request.getLeftBicepCm() != null) m.setLeftBicepCm(request.getLeftBicepCm());
         if (request.getRightBicepCm() != null) m.setRightBicepCm(request.getRightBicepCm());
@@ -105,6 +107,7 @@ public class BodyMeasurementService {
                 .neckCm(m.getNeckCm())
                 .chestCm(m.getChestCm())
                 .waistCm(m.getWaistCm())
+                .bellyCm(m.getBellyCm())
                 .hipsCm(m.getHipsCm())
                 .leftBicepCm(m.getLeftBicepCm())
                 .rightBicepCm(m.getRightBicepCm())

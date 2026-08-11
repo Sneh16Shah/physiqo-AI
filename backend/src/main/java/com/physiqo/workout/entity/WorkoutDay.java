@@ -34,7 +34,7 @@ public class WorkoutDay {
 
     private String notes;
 
-    @OneToMany(mappedBy = "day", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "day", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("orderIndex ASC")
     @Builder.Default
     private List<WorkoutExercise> exercises = new ArrayList<>();

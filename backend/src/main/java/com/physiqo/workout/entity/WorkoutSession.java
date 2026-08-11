@@ -43,7 +43,7 @@ public class WorkoutSession extends AuditableEntity {
     private String notes;
     private Integer rating; // 1-5
 
-    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("setNumber ASC")
     @Builder.Default
     private List<ExerciseSet> sets = new ArrayList<>();

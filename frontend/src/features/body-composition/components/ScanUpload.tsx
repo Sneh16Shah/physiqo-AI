@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { toast } from '../../../stores/toastStore';
+import { bodyCompApi } from '../../../api/bodycomp.api';
 
 interface ScanUploadProps {
   onUploadSuccess: (data: any) => void;
@@ -45,8 +46,8 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onUploadSuccess, uploadi
 
   const addFiles = (newFiles: File[]) => {
     const valid = newFiles.filter(file => {
-      if (file.size > 15 * 1024 * 1024) {
-        toast.error(`File ${file.name} exceeds 15MB size limit.`, 'File Too Large');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`File ${file.name} exceeds 50MB size limit.`, 'File Too Large');
         return false;
       }
       return true;
@@ -65,8 +66,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onUploadSuccess, uploadi
     setUploading(true);
     setUploadProgress({ current: 0, total: selectedFiles.length });
 
-    let lastResult: any = null;
-    let successCount = 0;
+    const results: any[] = [];
 
     for (let i = 0; i < selectedFiles.length; i++) {
       const fileToUpload = selectedFiles[i];
@@ -74,8 +74,10 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onUploadSuccess, uploadi
 
       setUploadProgress({ current: i + 1, total: selectedFiles.length });
       try {
-        lastResult = await onUpload(fileToUpload, reportType);
-        successCount++;
+        const res = await onUpload(fileToUpload, reportType);
+        if (res) {
+          results.push(res);
+        }
       } catch (error) {
         console.error(`Upload failed for ${fileToUpload.name}:`, error);
         toast.error(`Failed to process ${fileToUpload.name}`, 'Upload Error');
@@ -85,9 +87,54 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onUploadSuccess, uploadi
     setUploading(false);
     setUploadProgress(null);
 
-    if (successCount > 0) {
-      toast.success(`Successfully processed ${successCount} scan document(s)!`, 'Scan Upload Complete');
-      onUploadSuccess(lastResult);
+    if (results.length > 0) {
+      // Merge all extracted measurements into ONE primary report payload
+      const primaryReport = { ...results[0] };
+      const mergedMap: Record<string, any> = {};
+
+      for (const r of results) {
+        const meas = r?.measurements;
+        if (Array.isArray(meas)) {
+          for (const m of meas) {
+            if (m) {
+              const nameKey = m.metricName || m.name;
+              if (nameKey && m.metricValue != null) {
+                mergedMap[nameKey] = m;
+              }
+            }
+          }
+        } else if (meas && typeof meas === 'object') {
+          for (const [k, v] of Object.entries(meas)) {
+            if (v != null) {
+              mergedMap[k] = v;
+            }
+          }
+        }
+      }
+
+      // Assign merged measurements array to primary report
+      primaryReport.measurements = Object.values(mergedMap);
+
+      // Clean up temporary extra reports created for files 2..N
+      const primaryId = primaryReport.id || primaryReport.scanId;
+      for (let i = 1; i < results.length; i++) {
+        const extraId = results[i]?.id || results[i]?.scanId;
+        if (extraId && extraId !== primaryId) {
+          try {
+            await bodyCompApi.deleteReport(extraId);
+          } catch (e) {
+            console.warn('Failed to clean up temporary duplicate report:', extraId, e);
+          }
+        }
+      }
+
+      toast.success(
+        results.length > 1
+          ? `Merged metrics from ${results.length} scan pages into 1 consolidated report!`
+          : `Successfully processed scan document!`,
+        'Scan Upload Complete'
+      );
+      onUploadSuccess(primaryReport);
       setSelectedFiles([]);
     }
   };

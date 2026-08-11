@@ -75,49 +75,84 @@ class BodyCompOCRPipeline:
             )
 
         prompt = (
-            "Extract body composition measurements from this scale / monitor display image.\n"
-            "Extract values for:\n"
-            "- Weight (kg)\n"
-            "- Body fat (kg or %)\n"
-            "- Remove fat / Fat-free mass / Lean mass (kg)\n"
-            "- Body fat percentage (%)\n"
-            "- Water content / Moisture (kg or %)\n"
-            "- Protein (kg)\n"
-            "- Inorganic salt / Bone mineral (kg)\n"
-            "- BMI\n"
-            "- Visceral fat level\n"
-            "Look carefully at tables and digital screen numbers."
+            "Extract body composition measurements from this scale / monitor display image.\n\n"
+            "STRICT EXTRACTION RULES (PREVENT HALLUCINATION):\n"
+            "1. ONLY extract metrics that are EXPLICITLY labeled on the screen image.\n"
+            "2. IF A METRIC IS NOT LABELED ON THIS SCREEN, YOU MUST LEAVE IT AS NULL. DO NOT GUESS, ESTIMATE, OR CALCULATE MISSING VALUES.\n"
+            "3. IMPEDANCE TABLE WARNING: Numbers in tables labeled 'Impedance', '20kHz', '50kHz', '100kHz', 'RA', 'LA', 'TR', 'RL', 'LL' are bioelectrical impedance values (Ohms). DO NOT extract or map impedance numbers (e.g. 21.2, 513, 628) as BMI, Body Fat, Muscle, Protein, or Water!\n"
+            "4. TARGET WEIGHT vs MEASURED WEIGHT: 'Target weight' (e.g. 70.0 kg) is target_weight_kg. DO NOT map 'Target weight' to current measured body weight (weight_kg). Only map to weight_kg if labeled 'Weight' or 'Body Weight'.\n"
+            "5. HEIGHT: If the screen header shows 'Height' (e.g. '171cm'), extract it as height_cm. DO NOT confuse height with weight.\n"
+            "6. EXACT DISAMBIGUATION:\n"
+            "   - 'Body fat rate %' or 'Body fat %' -> body_fat_percentage (e.g. 20.7%).\n"
+            "   - 'BMI (kg/m²)' -> bmi (e.g. 24.6). DO NOT confuse BMI with Body Fat Rate %.\n"
+            "   - 'Basic metabolic' or 'BMR' -> bmr_kcal (e.g. 1697).\n"
+            "   - 'Health assess-ment score' or 'Health score' -> health_score (e.g. 88).\n"
+            "   - 'Weight Control' -> weight_control_kg (e.g. -2.2).\n"
+            "   - 'Fat Control' -> fat_control_kg (e.g. -2.2).\n"
+            "   - 'Muscle Control' -> muscle_control_kg (e.g. 0.0).\n\n"
+            "Extract values for visible parameters only:"
         )
         system_prompt = (
-            "You are a medical OCR specialist. Extract body composition scale screen numbers accurately. "
-            "Only extract numbers that are clearly visible."
+            "You are a medical OCR specialist. Extract body composition scale screen numbers strictly and accurately. "
+            "Never hallucinate or invent missing fields. Leave any unlabeled parameter as null."
         )
 
-        try:
-            result = await self.provider.extract_structured(
-                model_name=self.model_name,
-                prompt=prompt,
-                response_model=BodyCompositionExtractionResponse,
-                image_bytes=processed_bytes,
-                image_mime_type=mime_type,
-                system_prompt=system_prompt
-            )
+        candidates = [
+            ("original", processed_bytes),
+            ("rotated_90_cw", ImagePreprocessor.rotate(processed_bytes, 90)),
+            ("rotated_270_cw", ImagePreprocessor.rotate(processed_bytes, 270)),
+            ("rotated_180_cw", ImagePreprocessor.rotate(processed_bytes, 180)),
+        ]
 
-            category = calculate_confidence_category(result.confidence)
-            logger.info(f"✅ AI extraction succeeded: confidence={result.confidence}, data={result.measurement.model_dump(exclude_none=True)}")
+        import asyncio
+
+        async def _extract_candidate(label: str, img_candidate: bytes):
+            try:
+                res = await self.provider.extract_structured(
+                    model_name=self.model_name,
+                    prompt=prompt,
+                    response_model=BodyCompositionExtractionResponse,
+                    image_bytes=img_candidate,
+                    image_mime_type=mime_type,
+                    system_prompt=system_prompt
+                )
+                return label, res
+            except Exception as e:
+                logger.warning(f"Orientation attempt '{label}' error: {e}")
+                return label, None
+
+        tasks = [_extract_candidate(label, img) for label, img in candidates]
+        orientation_results = await asyncio.gather(*tasks)
+
+        best_result = None
+        best_metric_count = -1
+        best_label = ""
+
+        for label, result in orientation_results:
+            if result and result.measurement:
+                dumped = result.measurement.model_dump(exclude_none=True)
+                metric_count = len(dumped)
+                logger.info(f"Orientation attempt '{label}' extracted {metric_count} metrics: {dumped}")
+
+                if metric_count > best_metric_count:
+                    best_metric_count = metric_count
+                    best_result = result
+                    best_label = label
+
+        if best_result and best_metric_count > 0:
+            category = calculate_confidence_category(best_result.confidence)
+            logger.info(f"✅ AI extraction selected best candidate ({best_label}): {best_metric_count} metrics extracted")
             return StructuredResponse(
-                data=result,
-                confidence_score=result.confidence,
+                data=best_result,
+                confidence_score=best_result.confidence,
                 confidence_category=category
             )
 
-        except Exception as e:
-            logger.error(f"❌ AI extraction failed: {e}", exc_info=True)
-            extracted = BodyCompositionMeasurementExtracted()
-            response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
-            return StructuredResponse(
-                data=response,
-                confidence_score=0.0,
-                confidence_category="none",
-                error_message=f"AI extraction failed: {str(e)}"
-            )
+        extracted = BodyCompositionMeasurementExtracted()
+        response = BodyCompositionExtractionResponse(measurement=extracted, confidence=0.0)
+        return StructuredResponse(
+            data=response,
+            confidence_score=0.0,
+            confidence_category="none",
+            error_message="AI extraction failed across all rotation angles"
+        )

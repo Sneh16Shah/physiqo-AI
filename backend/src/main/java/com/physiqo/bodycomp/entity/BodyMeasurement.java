@@ -39,6 +39,9 @@ public class BodyMeasurement extends AuditableEntity {
     @Column(name = "waist_cm")
     private BigDecimal waistCm;
 
+    @Column(name = "belly_cm")
+    private BigDecimal bellyCm;
+
     @Column(name = "hips_cm")
     private BigDecimal hipsCm;
 

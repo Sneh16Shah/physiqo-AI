@@ -39,7 +39,7 @@ public class Exercise extends AuditableEntity {
     @Column(name = "created_by")
     private UUID createdBy;
 
-    @OneToMany(mappedBy = "exercise", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "exercise", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     private List<ExerciseMuscle> exerciseMuscles = new ArrayList<>();
 }

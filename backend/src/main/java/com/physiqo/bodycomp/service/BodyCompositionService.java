@@ -7,6 +7,8 @@ import com.physiqo.bodycomp.repository.BodyCompositionReportRepository;
 import com.physiqo.common.exception.ErrorCode;
 import com.physiqo.common.exception.ResourceNotFoundException;
 import com.physiqo.common.exception.ValidationException;
+import com.physiqo.user.entity.UserProfile;
+import com.physiqo.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -39,6 +41,7 @@ public class BodyCompositionService {
     private final AiServiceClient aiServiceClient;
     private final AiResponseValidator aiResponseValidator;
     private final ObjectMapper objectMapper;
+    private final UserProfileRepository userProfileRepository;
 
     @Transactional
     public BodyCompReportDto createReport(UUID userId, BodyCompReportRequest request) {
@@ -74,19 +77,35 @@ public class BodyCompositionService {
         byte[] fileBytes = null;
         try {
             fileBytes = file.getBytes();
+            if (fileBytes == null || fileBytes.length == 0) {
+                try (java.io.InputStream is = file.getInputStream()) {
+                    fileBytes = is.readAllBytes();
+                }
+            }
         } catch (Exception e) {
             log.warn("Failed to read bytes from uploaded multipart file: {}", e.getMessage());
         }
 
-        FileResponseDto fileInfo = storageService.uploadFile(userId, file, "BODY_COMP");
         UUID requestId = UUID.randomUUID();
+
+        // Fetch user height from profile for BMI derivation
+        Double heightCm = null;
+        try {
+            Optional<UserProfile> profileOpt = userProfileRepository.findByUserId(userId);
+            if (profileOpt.isPresent() && profileOpt.get().getHeightCm() != null) {
+                heightCm = profileOpt.get().getHeightCm().doubleValue();
+                log.info("Fetched user height from profile: {} cm", heightCm);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch user height from profile: {}", e.getMessage());
+        }
         
         Map<String, Object> aiResponse = null;
         double confidence = 0.85;
         try {
             String base64Image = (fileBytes != null && fileBytes.length > 0) ? java.util.Base64.getEncoder().encodeToString(fileBytes) : null;
             String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-            aiResponse = aiServiceClient.extractBodyComposition(requestId, base64Image, mimeType, fileInfo.getUrl());
+            aiResponse = aiServiceClient.extractBodyComposition(requestId, base64Image, mimeType, null, heightCm);
             log.info("AI service OCR extraction response for request {}: {}", requestId, aiResponse);
             if (aiResponse != null) {
                 confidence = aiResponseValidator.extractConfidence(aiResponse);
@@ -100,7 +119,7 @@ public class BodyCompositionService {
                 .reportDate(LocalDate.now())
                 .reportType("INBODY")
                 .source("OCR")
-                .fileId(fileInfo.getId())
+                .fileId(null)
                 .aiConfidence(BigDecimal.valueOf(confidence))
                 .userReviewed(false)
                 .build();
@@ -154,8 +173,27 @@ public class BodyCompositionService {
             throw new ValidationException("AI Vision extraction yielded 0 metrics. Please upload a clear photo of your body composition scale display or DEXA report.");
         }
 
+        // Extract derivedFields and missingMandatory from AI response
+        List<String> derivedFields = new ArrayList<>();
+        List<String> missingMandatory = new ArrayList<>();
+        if (aiResponse != null) {
+            if (aiResponse.get("derivedFields") instanceof List<?> df) {
+                for (Object item : df) {
+                    if (item != null) derivedFields.add(item.toString());
+                }
+            }
+            if (aiResponse.get("missingMandatory") instanceof List<?> mm) {
+                for (Object item : mm) {
+                    if (item != null) missingMandatory.add(item.toString());
+                }
+            }
+        }
+
         BodyCompositionReport saved = reportRepository.save(report);
-        return toDto(saved);
+        BodyCompReportDto dto = toDto(saved);
+        dto.setDerivedFields(derivedFields);
+        dto.setMissingMandatory(missingMandatory);
+        return dto;
     }
 
     @Transactional

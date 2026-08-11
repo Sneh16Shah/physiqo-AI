@@ -1,4 +1,4 @@
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 import io
 
 class ImagePreprocessor:
@@ -6,39 +6,40 @@ class ImagePreprocessor:
     def process(image_bytes: bytes) -> bytes:
         try:
             image = Image.open(io.BytesIO(image_bytes))
-            # Auto-rotate based on EXIF
+            # Auto-rotate based on EXIF metadata using standard ImageOps
             try:
-                from PIL import ExifTags
-                for orientation in ExifTags.TAGS.keys():
-                    if ExifTags.TAGS[orientation]=='Orientation':
-                        break
-                exif = image._getexif()
-                if exif is not None:
-                    orientation_value = exif.get(orientation)
-                    if orientation_value == 3:
-                        image = image.rotate(180, expand=True)
-                    elif orientation_value == 6:
-                        image = image.rotate(270, expand=True)
-                    elif orientation_value == 8:
-                        image = image.rotate(90, expand=True)
-            except (AttributeError, KeyError, IndexError):
+                image = ImageOps.exif_transpose(image)
+            except Exception:
                 pass
                 
             # Convert to RGB if needed
             if image.mode != 'RGB':
                 image = image.convert('RGB')
                 
-            # Resize if too large
-            max_size = (1024, 1024)
+            # Resize if too large (keep high resolution for fine display text)
+            max_size = (2048, 2048)
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
             
-            # Enhance contrast
+            # Gentle contrast enhancement to avoid blowing out highlights on LCD/LED displays
             enhancer = ImageEnhance.Contrast(image)
-            image = enhancer.enhance(1.5)
+            image = enhancer.enhance(1.1)
             
             output = io.BytesIO()
-            image.save(output, format="JPEG", quality=85)
+            image.save(output, format="JPEG", quality=92)
             return output.getvalue()
-        except Exception as e:
-            # Fallback to original bytes on error
+        except Exception:
             return image_bytes
+
+    @staticmethod
+    def rotate(image_bytes: bytes, angle: int) -> bytes:
+        """Rotate image by angle (90, 180, 270 degrees clockwise)."""
+        try:
+            image = Image.open(io.BytesIO(image_bytes))
+            # PIL rotate is counter-clockwise, so clockwise angle requires (360 - angle) % 360
+            rotated_image = image.rotate((360 - angle) % 360, expand=True)
+            output = io.BytesIO()
+            rotated_image.save(output, format="JPEG", quality=92)
+            return output.getvalue()
+        except Exception:
+            return image_bytes
+

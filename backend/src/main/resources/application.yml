@@ -40,8 +40,9 @@ spring:
   # ── Servlet ───────────────────────────────────────────────────────────────────
   servlet:
     multipart:
-      max-file-size: 15MB
-      max-request-size: 15MB
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
 
   # ── DevTools (hot reload — auto-disabled when not dev profile) ──────────────
   devtools:
@@ -51,6 +52,9 @@ spring:
 # ── Server ────────────────────────────────────────────────────────────────────
 server:
   port: 8080
+  tomcat:
+    max-swallow-size: 50MB
+    max-http-form-post-size: 50MB
   servlet:
     context-path: /
 

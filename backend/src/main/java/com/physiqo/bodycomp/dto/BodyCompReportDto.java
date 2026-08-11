@@ -22,6 +22,8 @@ public class BodyCompReportDto {
     private Boolean userReviewed;
     private String notes;
     private List<MeasurementDto> measurements;
+    private List<String> derivedFields;
+    private List<String> missingMandatory;
     private Instant createdAt;
     private Instant updatedAt;
 }

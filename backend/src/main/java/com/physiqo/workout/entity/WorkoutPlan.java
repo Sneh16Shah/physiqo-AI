@@ -34,7 +34,7 @@ public class WorkoutPlan extends AuditableEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("dayNumber ASC")
     @Builder.Default
     private List<WorkoutDay> days = new ArrayList<>();

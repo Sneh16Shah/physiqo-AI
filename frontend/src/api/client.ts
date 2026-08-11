@@ -4,6 +4,7 @@ import { toast } from '../stores/toastStore';
 
 const apiClient = axios.create({
   baseURL: '/api/v1',
+  timeout: 180000,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -6,6 +6,7 @@ import base64
 import json
 
 from app.pipelines.ocr.body_comp import BodyCompOCRPipeline
+from app.pipelines.ocr.deriver import derive_missing_metrics, get_missing_mandatory
 from app.schemas.common import StructuredResponse
 from app.schemas.ocr import BodyCompositionExtractionResponse
 
@@ -17,14 +18,17 @@ router = APIRouter()
 async def scan_ocr_image(request: Request):
     """
     Endpoint called by Spring Boot AiServiceClient: POST /api/v1/ocr/scan
-    Payload: {"image_base64": "...", "mime_type": "image/jpeg"} or {"image_url": "..."}
+    Payload: {"image_base64": "...", "mime_type": "image/jpeg", "height_cm": 171} or {"image_url": "..."}
     """
     body_bytes = await request.body()
+    request_id = request.headers.get("X-Request-Id", "unknown")
+    logger.info(f"📥 Received /ocr/scan request [requestId={request_id}] - raw_body_len={len(body_bytes)}")
+    
     raw_payload = {}
     if body_bytes:
         try:
             raw_payload = json.loads(body_bytes.decode("utf-8"))
-            logger.info(f"Parsed JSON payload with keys: {list(raw_payload.keys())}")
+            logger.info(f"Parsed JSON payload keys: {list(raw_payload.keys())}")
         except Exception as e:
             logger.warning(f"Could not parse JSON body from {len(body_bytes)} bytes: {e}")
 
@@ -33,8 +37,16 @@ async def scan_ocr_image(request: Request):
     image_base64 = raw_payload.get("image_base64") or raw_payload.get("imageBase64")
     image_url = raw_payload.get("image_url") or raw_payload.get("imageUrl")
     mime_type = raw_payload.get("mime_type") or raw_payload.get("mimeType") or "image/jpeg"
+    height_cm = raw_payload.get("height_cm") or raw_payload.get("heightCm")
 
-    logger.info(f"Received /ocr/scan request - base64_len: {len(image_base64) if image_base64 else 0}, image_url: {image_url}, mime_type: {mime_type}")
+    # Parse height_cm to float if provided
+    if height_cm is not None:
+        try:
+            height_cm = float(height_cm)
+        except (ValueError, TypeError):
+            height_cm = None
+
+    logger.info(f"Processing /ocr/scan [requestId={request_id}] - base64_len: {len(image_base64) if image_base64 else 0}, image_url: {image_url}, mime_type: {mime_type}, height_cm: {height_cm}")
 
     if image_base64:
         try:
@@ -71,18 +83,26 @@ async def scan_ocr_image(request: Request):
         logger.warning("No image bytes available for OCR, running fallback pipeline")
         result = await pipeline.extract(b"", mime_type="image/jpeg")
 
-    # Flat measurements map for Java BodyCompositionService (which checks: entry.getValue() instanceof Number)
+    # --- Run derivation engine on extracted measurement ---
+    derived_fields: list[str] = []
+    if result.data and result.data.measurement:
+        derived_fields = derive_missing_metrics(result.data.measurement, height_cm=height_cm)
+        logger.info(f"Derivation engine filled {len(derived_fields)} fields: {derived_fields}")
+
+    # --- Build measurements map for response ---
     measurements_map: Dict[str, Any] = {}
     if result.data and result.data.measurement:
         m = result.data.measurement
+        if m.height_cm is not None:
+            measurements_map["height_cm"] = m.height_cm
         if m.weight_kg is not None:
             measurements_map["weight"] = m.weight_kg
+        if m.skeletal_muscle_mass_kg is not None:
+            measurements_map["skeletal_muscle_mass"] = m.skeletal_muscle_mass_kg
         if m.body_fat_kg is not None:
             measurements_map["body_fat_mass"] = m.body_fat_kg
         if m.body_fat_percentage is not None:
             measurements_map["body_fat_pct"] = m.body_fat_percentage
-        if m.muscle_mass_kg is not None:
-            measurements_map["skeletal_muscle_mass"] = m.muscle_mass_kg
         if m.fat_free_mass_kg is not None:
             measurements_map["fat_free_mass"] = m.fat_free_mass_kg
         if m.water_content_kg is not None:
@@ -95,15 +115,58 @@ async def scan_ocr_image(request: Request):
             measurements_map["inorganic_salt"] = m.inorganic_salt_kg
         if m.bmi is not None:
             measurements_map["bmi"] = m.bmi
+        if m.waist_hip_ratio is not None:
+            measurements_map["waist_hip_ratio"] = m.waist_hip_ratio
+        if m.bmr_kcal is not None:
+            measurements_map["bmr"] = m.bmr_kcal
         if m.visceral_fat_level is not None:
             measurements_map["visceral_fat_level"] = m.visceral_fat_level
+        if m.health_score is not None:
+            measurements_map["health_score"] = m.health_score
+        if m.target_weight_kg is not None:
+            measurements_map["target_weight"] = m.target_weight_kg
+        if m.weight_control_kg is not None:
+            measurements_map["weight_control"] = m.weight_control_kg
+        if m.fat_control_kg is not None:
+            measurements_map["fat_control"] = m.fat_control_kg
+        if m.muscle_control_kg is not None:
+            measurements_map["muscle_control"] = m.muscle_control_kg
+
+    # Map derived field schema names to measurement_map keys
+    derived_key_map = {
+        "body_fat_percentage": "body_fat_pct",
+        "body_fat_kg": "body_fat_mass",
+        "fat_free_mass_kg": "fat_free_mass",
+        "water_content_kg": "water_content",
+        "water_percentage": "water_pct",
+        "protein_kg": "protein",
+        "inorganic_salt_kg": "inorganic_salt",
+        "bmi": "bmi",
+        "bmr_kcal": "bmr",
+    }
+    derived_keys_for_frontend = [derived_key_map.get(f, f) for f in derived_fields]
+
+    # Get missing mandatory fields
+    missing_mandatory: list[str] = []
+    if result.data and result.data.measurement:
+        missing_mandatory = get_missing_mandatory(result.data.measurement)
+    # Map to frontend-friendly keys
+    mandatory_key_map = {
+        "weight_kg": "weight",
+        "skeletal_muscle_mass_kg": "skeletal_muscle_mass",
+        "body_fat_kg_or_percentage": "body_fat_mass_or_pct",
+    }
+    missing_mandatory_frontend = [mandatory_key_map.get(f, f) for f in missing_mandatory]
 
     logger.info(f"OCR extraction finished with {len(measurements_map)} metrics extracted: {measurements_map}")
+    logger.info(f"Derived fields: {derived_keys_for_frontend}, Missing mandatory: {missing_mandatory_frontend}")
 
     return {
         "confidence": result.confidence_score,
         "confidenceCategory": result.confidence_category,
-        "measurements": measurements_map
+        "measurements": measurements_map,
+        "derivedFields": derived_keys_for_frontend,
+        "missingMandatory": missing_mandatory_frontend,
     }
 
 

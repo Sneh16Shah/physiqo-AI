@@ -18,11 +18,27 @@ export const aiApi = {
     const response = await apiClient.put(`/body-composition/reports/${id}/confirm`, {
       reportDate: today,
       reportType: 'INBODY',
-      measurements: Object.entries(measurements).map(([key, val]) => ({
-        metricName: key,
-        metricValue: typeof val === 'number' ? val : parseFloat(val) || 0,
-        metricUnit: key.includes('pct') || key.includes('percent') ? '%' : (key === 'bmi' ? 'kg/m²' : (key.includes('visceral') ? 'level' : 'kg'))
-      }))
+      measurements: Object.entries(measurements).map(([key, val]) => {
+        let unit = 'kg';
+        if (key.includes('pct') || key.includes('percent')) {
+          unit = '%';
+        } else if (key === 'bmi') {
+          unit = 'kg/m²';
+        } else if (key.includes('bmr')) {
+          unit = 'kcal';
+        } else if (key.includes('score')) {
+          unit = 'score';
+        } else if (key.includes('ratio') || key.includes('rate')) {
+          unit = 'ratio';
+        } else if (key.includes('visceral')) {
+          unit = 'level';
+        }
+        return {
+          metricName: key,
+          metricValue: typeof val === 'number' ? val : parseFloat(val) || 0,
+          metricUnit: unit,
+        };
+      })
     });
     console.log("body scan confirm response", response);
     return response.data;

@@ -1,5 +1,6 @@
 package com.physiqo.ai.client;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -9,6 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Component
 public class AiServiceClient {
 
@@ -23,8 +25,9 @@ public class AiServiceClient {
         if (cleanBaseUrl.endsWith("/")) {
             cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
         }
-        org.springframework.http.client.JdkClientHttpRequestFactory requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory();
-        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(90));
+        org.springframework.http.client.SimpleClientHttpRequestFactory requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(java.time.Duration.ofSeconds(15));
+        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(180));
 
         this.restClient = restClientBuilder
                 .requestFactory(requestFactory)
@@ -58,8 +61,8 @@ public class AiServiceClient {
     }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> extractBodyComposition(UUID requestId, String imageBase64, String mimeType, String imageUrl) {
-        Map<String, String> payload = new HashMap<>();
+    public Map<String, Object> extractBodyComposition(UUID requestId, String imageBase64, String mimeType, String imageUrl, Double heightCm) {
+        Map<String, Object> payload = new HashMap<>();
         if (imageBase64 != null && !imageBase64.isBlank()) {
             payload.put("image_base64", imageBase64);
         }
@@ -69,14 +72,31 @@ public class AiServiceClient {
         if (imageUrl != null && !imageUrl.isBlank()) {
             payload.put("image_url", imageUrl);
         }
+        if (heightCm != null) {
+            payload.put("height_cm", heightCm);
+        }
 
-        return restClient.post()
-                .uri("/api/v1/ocr/scan")
-                .header("X-Service-Key", serviceKey)
-                .header("X-Request-Id", requestId.toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .body(Map.class);
+        log.info("➡️ Sending OCR extraction request to AI service [requestId={}]: base64Len={}, mimeType={}, imageUrl={}, heightCm={}",
+                requestId, imageBase64 != null ? imageBase64.length() : 0, mimeType, imageUrl, heightCm);
+
+        long start = System.currentTimeMillis();
+        try {
+            Map<String, Object> response = restClient.post()
+                    .uri("/api/v1/ocr/scan")
+                    .header("X-Service-Key", serviceKey)
+                    .header("X-Request-Id", requestId.toString())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(Map.class);
+
+            long duration = System.currentTimeMillis() - start;
+            log.info("⬅️ AI service OCR response received in {}ms [requestId={}]: {}", duration, requestId, response);
+            return response;
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - start;
+            log.error("❌ AI service OCR request FAILED after {}ms [requestId={}]: error={}", duration, requestId, e.getMessage(), e);
+            throw e;
+        }
     }
 }
