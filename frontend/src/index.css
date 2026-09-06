@@ -26,6 +26,23 @@
   body {
     min-height: 100vh;
   }
+
+  /* Make native datepicker calendar icon bright and visible in dark mode */
+  input[type="date"] {
+    color-scheme: dark;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.85);
+    cursor: pointer;
+    opacity: 0.85;
+    transition: opacity 0.2s, filter 0.2s;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    filter: invert(1);
+  }
 }
 
 @layer components {
