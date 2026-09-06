@@ -21,7 +21,14 @@ public class NutritionGoalService {
     @Transactional(readOnly = true)
     public NutritionGoal getCurrentGoal(UUID userId) {
         return goalRepository.findCurrentGoalForUser(userId, LocalDate.now())
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.NOT_FOUND_MEAL, "No active nutrition goal found for user"));
+                .orElseGet(() -> NutritionGoal.builder()
+                        .userId(userId)
+                        .caloriesKcal(new java.math.BigDecimal("2200"))
+                        .proteinG(new java.math.BigDecimal("160"))
+                        .carbsG(new java.math.BigDecimal("220"))
+                        .fatG(new java.math.BigDecimal("65"))
+                        .effectiveFrom(LocalDate.now())
+                        .build());
     }
 
     @Transactional

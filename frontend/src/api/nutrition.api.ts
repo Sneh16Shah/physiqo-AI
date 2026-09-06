@@ -7,6 +7,7 @@ export const nutritionApi = {
   createMeal: async (data: any) => apiClient.post('/meals', data),
   updateMeal: async (id: string, data: any) => apiClient.put(`/meals/${id}`, data),
   deleteMeal: async (id: string) => apiClient.delete(`/meals/${id}`),
+  deleteMealItem: async (mealId: string, itemId: string) => apiClient.delete(`/meals/${mealId}/items/${itemId}`),
   getDailySummary: async (date?: string) => apiClient.get('/meals/daily-summary', { params: { date } }),
   getCurrentGoal: async () => apiClient.get('/nutrition-goals/current'),
   setGoal: async (data: any) => apiClient.post('/nutrition-goals', data),

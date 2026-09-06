@@ -33,13 +33,19 @@ public class MealService {
 
     @Transactional
     public MealDto createMeal(UUID userId, MealRequest request) {
-        Meal meal = Meal.builder()
-                .userId(userId)
-                .mealType(request.getMealType().toUpperCase())
-                .mealDate(request.getMealDate())
-                .mealTime(request.getMealTime() != null ? request.getMealTime() : LocalTime.now())
-                .notes(request.getNotes())
-                .build();
+        String mealType = request.getMealType().toUpperCase();
+        Meal meal = mealRepository.findByUserIdAndMealTypeAndMealDate(userId, mealType, request.getMealDate())
+                .orElseGet(() -> Meal.builder()
+                        .userId(userId)
+                        .mealType(mealType)
+                        .mealDate(request.getMealDate())
+                        .mealTime(request.getMealTime() != null ? request.getMealTime() : LocalTime.now())
+                        .notes(request.getNotes())
+                        .build());
+
+        if (meal.getNotes() == null && request.getNotes() != null) {
+            meal.setNotes(request.getNotes());
+        }
 
         if (request.getItems() != null) {
             for (MealItemRequest itemReq : request.getItems()) {
@@ -85,6 +91,22 @@ public class MealService {
         Meal meal = mealRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.NOT_FOUND_MEAL, "Meal not found: " + id));
         mealRepository.delete(meal);
+    }
+
+    @Transactional
+    public MealDto deleteMealItem(UUID mealId, UUID itemId, UUID userId) {
+        Meal meal = mealRepository.findByIdAndUserId(mealId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.NOT_FOUND_MEAL, "Meal not found: " + mealId));
+
+        meal.getItems().removeIf(item -> itemId.equals(item.getId()));
+
+        if (meal.getItems().isEmpty()) {
+            mealRepository.delete(meal);
+            return null;
+        }
+
+        Meal saved = mealRepository.save(meal);
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)

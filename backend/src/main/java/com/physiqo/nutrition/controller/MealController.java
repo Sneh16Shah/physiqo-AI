@@ -67,4 +67,13 @@ public class MealController {
         mealService.deleteMeal(id, currentUser.getId());
         return ResponseEntity.noContent().build();
     }
+
+    @DeleteMapping("/{mealId}/items/{itemId}")
+    public ResponseEntity<MealDto> deleteMealItem(
+            @CurrentUser UserPrincipal currentUser,
+            @PathVariable UUID mealId,
+            @PathVariable UUID itemId) {
+        MealDto meal = mealService.deleteMealItem(mealId, itemId, currentUser.getId());
+        return ResponseEntity.ok(meal);
+    }
 }

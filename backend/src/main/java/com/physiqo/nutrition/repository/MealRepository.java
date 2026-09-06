@@ -18,4 +18,5 @@ public interface MealRepository extends JpaRepository<Meal, UUID> {
     Page<Meal> findByUserIdAndMealDateBetween(UUID userId, LocalDate from, LocalDate to, Pageable pageable);
     List<Meal> findByUserIdAndMealDateOrderByMealTimeAsc(UUID userId, LocalDate mealDate);
     Optional<Meal> findByIdAndUserId(UUID id, UUID userId);
+    Optional<Meal> findByUserIdAndMealTypeAndMealDate(UUID userId, String mealType, LocalDate mealDate);
 }
