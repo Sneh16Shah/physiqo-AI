@@ -59,7 +59,14 @@ const MEAL_TYPES = [
   { key: 'SNACK', label: 'Snacks', icon: '🍎' },
 ];
 
-const getTodayString = (): string => new Date().toISOString().split('T')[0] || '';
+const formatLocalDate = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTodayString = (): string => formatLocalDate(new Date());
 
 const NutritionPage: React.FC = () => {
   const [date, setDate] = useState<string>(getTodayString);
@@ -117,10 +124,13 @@ const NutritionPage: React.FC = () => {
 
   // Date Navigation Helpers
   const shiftDate = (days: number) => {
-    const d = new Date(date + 'T00:00:00');
+    const parts = date.split('-').map(Number);
+    const year = parts[0] || new Date().getFullYear();
+    const month = (parts[1] || 1) - 1;
+    const day = parts[2] || 1;
+    const d = new Date(year, month, day);
     d.setDate(d.getDate() + days);
-    const shifted = d.toISOString().split('T')[0];
-    if (shifted) setDate(shifted);
+    setDate(formatLocalDate(d));
   };
 
   const isToday = date === getTodayString();
