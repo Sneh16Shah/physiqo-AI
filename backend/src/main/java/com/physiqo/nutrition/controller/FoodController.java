@@ -2,6 +2,7 @@ package com.physiqo.nutrition.controller;
 
 import com.physiqo.common.security.CurrentUser;
 import com.physiqo.common.security.UserPrincipal;
+import com.physiqo.nutrition.entity.DietaryType;
 import com.physiqo.nutrition.entity.Food;
 import com.physiqo.nutrition.service.FoodService;
 import jakarta.validation.Valid;
@@ -26,8 +27,9 @@ public class FoodController {
             @CurrentUser UserPrincipal currentUser,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean custom,
+            @RequestParam(required = false) DietaryType dietaryType,
             Pageable pageable) {
-        Page<Food> foods = foodService.searchFoods(search, custom, currentUser.getId(), pageable);
+        Page<Food> foods = foodService.searchFoods(search, custom, dietaryType, currentUser.getId(), pageable);
         return ResponseEntity.ok(foods);
     }
 

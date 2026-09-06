@@ -5,6 +5,8 @@ import { LogMealModal } from './components/LogMealModal';
 import { NutritionGoalModal } from './components/NutritionGoalModal';
 import { toast } from '../../stores/toastStore';
 
+import { DietaryBadge, DietaryType } from './components/DietaryBadge';
+
 interface MealItemDto {
   id: string;
   foodId: string;
@@ -17,6 +19,7 @@ interface MealItemDto {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  dietaryType?: DietaryType | string;
 }
 
 interface MealDto {
@@ -69,6 +72,7 @@ const NutritionPage: React.FC = () => {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [targetMealType, setTargetMealType] = useState('BREAKFAST');
+  const [dietaryFilter, setDietaryFilter] = useState<'ALL' | DietaryType>('ALL');
 
   const fetchNutritionData = useCallback(async () => {
     setLoading(true);
@@ -337,14 +341,45 @@ const NutritionPage: React.FC = () => {
 
       {/* Meals Breakdown List */}
       <div className="bg-surface-900 p-6 rounded-2xl border border-surface-800 space-y-6">
-        <div className="flex justify-between items-center border-b border-surface-800 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-800 pb-4 gap-3">
           <div>
             <h2 className="text-lg font-bold text-white">Meals Breakdown</h2>
             <p className="text-xs text-gray-400 mt-0.5">Categorized food items consumed today</p>
           </div>
-          <span className="text-xs font-bold text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">
-            {totalCalories} kcal Total
-          </span>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Dietary Filter Buttons */}
+            <div className="flex items-center gap-1 bg-surface-950 p-1 rounded-xl border border-surface-800">
+              {(
+                [
+                  { id: 'ALL', label: 'All' },
+                  { id: 'VEG', label: 'Veg', badge: 'VEG' },
+                  { id: 'EGG', label: 'Egg', badge: 'EGG' },
+                  { id: 'NON_VEG', label: 'Non-Veg', badge: 'NON_VEG' },
+                ] as const
+              ).map((f) => {
+                const isActive = dietaryFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setDietaryFilter(f.id as any)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-surface-800 text-white shadow-xs'
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {'badge' in f && <DietaryBadge type={f.badge} size="sm" />}
+                    <span>{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <span className="text-xs font-bold text-brand-400 bg-brand-500/10 px-3 py-1.5 rounded-full border border-brand-500/20">
+              {totalCalories} kcal Total
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -360,6 +395,12 @@ const NutritionPage: React.FC = () => {
             const allItems = matchingMeals.flatMap((m) =>
               m.items.map((it) => ({ ...it, mealId: m.id }))
             );
+
+            const displayedItems = allItems.filter((item) => {
+              if (dietaryFilter === 'ALL') return true;
+              const itType = (item.dietaryType || 'VEG').toUpperCase();
+              return itType === dietaryFilter;
+            });
 
             const sectionCalories = Math.round(
               matchingMeals.reduce((sum, m) => sum + (Number(m.totals?.calories) || 0), 0)
@@ -413,23 +454,30 @@ const NutritionPage: React.FC = () => {
                   <p className="text-xs text-gray-500 py-3 pl-2 italic">
                     No entries logged for {label.toLowerCase()} yet.
                   </p>
+                ) : displayedItems.length === 0 ? (
+                  <p className="text-xs text-gray-500 py-3 pl-2 italic">
+                    No {dietaryFilter === 'NON_VEG' ? 'Non-Veg' : dietaryFilter === 'EGG' ? 'Egg-Veg' : 'Veg'} entries logged in {label.toLowerCase()}.
+                  </p>
                 ) : (
                   <div className="space-y-2">
-                    {allItems.map((item) => (
+                    {displayedItems.map((item) => (
                       <div
                         key={item.id}
                         className="flex justify-between items-center bg-surface-950 p-3.5 rounded-xl border border-surface-800 hover:border-surface-700 transition-all group"
                       >
                         <div className="space-y-0.5">
-                          <p className="text-xs font-semibold text-white">
-                            {item.foodName}
-                            {item.brand && (
-                              <span className="text-[10px] text-gray-500 ml-1.5 font-normal">
-                                ({item.brand})
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-[11px] text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <DietaryBadge type={item.dietaryType} size="sm" />
+                            <p className="text-xs font-semibold text-white">
+                              {item.foodName}
+                              {item.brand && (
+                                <span className="text-[10px] text-gray-500 ml-1.5 font-normal">
+                                  ({item.brand})
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <p className="text-[11px] text-gray-400 pl-5">
                             <span className="text-gray-300 font-medium">
                               {item.quantity} serving{item.quantity > 1 ? 's' : ''}
                             </span>{' '}

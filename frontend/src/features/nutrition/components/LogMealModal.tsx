@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { nutritionApi } from '../../../api/nutrition.api';
 import { toast } from '../../../stores/toastStore';
+import { DietaryBadge, DietaryType } from './DietaryBadge';
 
 interface FoodItem {
   id: string;
@@ -12,6 +13,7 @@ interface FoodItem {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  dietaryType?: DietaryType;
 }
 
 interface Props {
@@ -34,6 +36,7 @@ export const LogMealModal: React.FC<Props> = ({
   
   // Search tab state
   const [searchQuery, setSearchQuery] = useState('');
+  const [dietaryFilter, setDietaryFilter] = useState<'ALL' | DietaryType>('ALL');
   const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
@@ -43,6 +46,7 @@ export const LogMealModal: React.FC<Props> = ({
   // Custom food state
   const [customName, setCustomName] = useState('');
   const [customBrand, setCustomBrand] = useState('');
+  const [customDietaryType, setCustomDietaryType] = useState<DietaryType>('VEG');
   const [customServingG, setCustomServingG] = useState(100);
   const [customServingLabel, setCustomServingLabel] = useState('100g');
   const [customCalories, setCustomCalories] = useState<number | ''>('');
@@ -57,6 +61,7 @@ export const LogMealModal: React.FC<Props> = ({
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery('');
+      setDietaryFilter('ALL');
       setSelectedFood(null);
       setQuantity(1);
       return;
@@ -65,11 +70,20 @@ export const LogMealModal: React.FC<Props> = ({
     const fetchInitialFoods = async () => {
       setSearching(true);
       try {
-        const res = await nutritionApi.getFoods({ search: searchQuery.trim() || undefined, size: 20 });
+        const res = await nutritionApi.getFoods({
+          search: searchQuery.trim() || undefined,
+          dietaryType: dietaryFilter !== 'ALL' ? dietaryFilter : undefined,
+          size: 30,
+        });
         const items = res.data.content || res.data || [];
         setSearchResults(items);
-        if (!selectedFood && items.length > 0) {
-          setSelectedFood(items[0]);
+        if (items.length > 0) {
+          // If previous selection isn't in new list, pick first item
+          if (!selectedFood || !items.some((it: FoodItem) => it.id === selectedFood.id)) {
+            setSelectedFood(items[0]);
+          }
+        } else {
+          setSelectedFood(null);
         }
       } catch (err) {
         console.error('Failed to load foods:', err);
@@ -78,9 +92,9 @@ export const LogMealModal: React.FC<Props> = ({
       }
     };
 
-    const timer = setTimeout(fetchInitialFoods, 200);
+    const timer = setTimeout(fetchInitialFoods, 150);
     return () => clearTimeout(timer);
-  }, [searchQuery, isOpen]);
+  }, [searchQuery, dietaryFilter, isOpen]);
 
   if (!isOpen) return null;
 
@@ -126,6 +140,7 @@ export const LogMealModal: React.FC<Props> = ({
         proteinG: Number(customProtein) || 0,
         carbsG: Number(customCarbs) || 0,
         fatG: Number(customFat) || 0,
+        dietaryType: customDietaryType,
         custom: true,
       });
 
@@ -228,13 +243,43 @@ export const LogMealModal: React.FC<Props> = ({
                 <span className="absolute left-3 top-2.5 text-gray-500 text-xs">🔍</span>
               </div>
 
+              {/* Dietary Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                <span className="text-[11px] text-gray-400 font-medium mr-1">Filter:</span>
+                {(
+                  [
+                    { id: 'ALL', label: 'All' },
+                    { id: 'VEG', label: 'Veg', badge: 'VEG' },
+                    { id: 'EGG', label: 'Egg-Veg', badge: 'EGG' },
+                    { id: 'NON_VEG', label: 'Non-Veg', badge: 'NON_VEG' },
+                  ] as const
+                ).map((f) => {
+                  const isActive = dietaryFilter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setDietaryFilter(f.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-surface-800 text-white border-brand-500 shadow-xs'
+                          : 'bg-surface-950/60 text-gray-400 border-surface-800 hover:text-gray-200 hover:border-surface-700'
+                      }`}
+                    >
+                      {'badge' in f && <DietaryBadge type={f.badge} size="sm" />}
+                      <span>{f.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Search Results List */}
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {searching ? (
                   <div className="py-8 text-center text-xs text-gray-500">Searching food library...</div>
                 ) : searchResults.length === 0 ? (
                   <div className="py-8 text-center text-xs text-gray-400">
-                    No foods found. Try a different query or use the "+ Add Custom Food" tab.
+                    No foods found for the selected filter. Try a different search query or select "All".
                   </div>
                 ) : (
                   searchResults.map((food) => {
@@ -249,9 +294,15 @@ export const LogMealModal: React.FC<Props> = ({
                             : 'bg-surface-950/60 border-surface-800 hover:border-surface-700'
                         }`}
                       >
-                        <div>
-                          <p className="text-xs font-semibold text-white">{food.name}</p>
-                          <p className="text-[10px] text-gray-400">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <DietaryBadge type={food.dietaryType} size="sm" />
+                            <p className="text-xs font-semibold text-white">{food.name}</p>
+                            {food.brand && (
+                              <span className="text-[10px] text-gray-500">({food.brand})</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-400 pl-5">
                             {food.servingLabel || `${food.servingSizeG}g`} • {food.proteinG}g P • {food.carbsG}g C • {food.fatG}g F
                           </p>
                         </div>
@@ -346,6 +397,35 @@ export const LogMealModal: React.FC<Props> = ({
                   onChange={(e) => setCustomName(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-950 border border-surface-700 text-white rounded-xl text-xs focus:outline-none focus:border-brand-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 uppercase mb-1.5">
+                  Dietary Preference
+                </label>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { id: 'VEG', label: 'Veg' },
+                      { id: 'EGG', label: 'Egg-Veg' },
+                      { id: 'NON_VEG', label: 'Non-Veg' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCustomDietaryType(opt.id)}
+                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        customDietaryType === opt.id
+                          ? 'bg-surface-800 text-white border-brand-500 shadow-xs'
+                          : 'bg-surface-950/60 text-gray-400 border-surface-800 hover:text-gray-200'
+                      }`}
+                    >
+                      <DietaryBadge type={opt.id} size="sm" />
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">

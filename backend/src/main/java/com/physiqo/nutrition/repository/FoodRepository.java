@@ -1,5 +1,6 @@
 package com.physiqo.nutrition.repository;
 
+import com.physiqo.nutrition.entity.DietaryType;
 import com.physiqo.nutrition.entity.Food;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,14 +17,17 @@ public interface FoodRepository extends JpaRepository<Food, UUID> {
     @Query(value = "SELECT f FROM Food f WHERE " +
            "(:search IS NULL OR LOWER(f.name) LIKE :search OR LOWER(f.brand) LIKE :search) AND " +
            "(:custom IS NULL OR f.custom = :custom) AND " +
+           "(:dietaryType IS NULL OR f.dietaryType = :dietaryType) AND " +
            "(f.custom = false OR (:userId IS NOT NULL AND f.createdBy = :userId))",
            countQuery = "SELECT count(f) FROM Food f WHERE " +
            "(:search IS NULL OR LOWER(f.name) LIKE :search OR LOWER(f.brand) LIKE :search) AND " +
            "(:custom IS NULL OR f.custom = :custom) AND " +
+           "(:dietaryType IS NULL OR f.dietaryType = :dietaryType) AND " +
            "(f.custom = false OR (:userId IS NOT NULL AND f.createdBy = :userId))")
     Page<Food> searchFoods(
             @Param("search") String search,
             @Param("custom") Boolean custom,
+            @Param("dietaryType") DietaryType dietaryType,
             @Param("userId") UUID userId,
             Pageable pageable);
 }

@@ -60,4 +60,9 @@ public class Food extends AuditableEntity {
 
     @Column(nullable = false)
     private boolean verified = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dietary_type", length = 20)
+    @Builder.Default
+    private DietaryType dietaryType = DietaryType.VEG;
 }

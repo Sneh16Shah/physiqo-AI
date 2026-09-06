@@ -38,6 +38,7 @@ public class MealDto {
         private BigDecimal proteinG;
         private BigDecimal carbsG;
         private BigDecimal fatG;
+        private String dietaryType;
     }
 
     @Data

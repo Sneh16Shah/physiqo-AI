@@ -2,6 +2,7 @@ package com.physiqo.nutrition.service;
 
 import com.physiqo.common.exception.ErrorCode;
 import com.physiqo.common.exception.ResourceNotFoundException;
+import com.physiqo.nutrition.entity.DietaryType;
 import com.physiqo.nutrition.entity.Food;
 import com.physiqo.nutrition.repository.FoodRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +20,9 @@ public class FoodService {
     private final FoodRepository foodRepository;
 
     @Transactional(readOnly = true)
-    public Page<Food> searchFoods(String search, Boolean custom, UUID userId, Pageable pageable) {
+    public Page<Food> searchFoods(String search, Boolean custom, DietaryType dietaryType, UUID userId, Pageable pageable) {
         String searchParam = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
-        return foodRepository.searchFoods(searchParam, custom, userId, pageable);
+        return foodRepository.searchFoods(searchParam, custom, dietaryType, userId, pageable);
     }
 
     @Transactional(readOnly = true)

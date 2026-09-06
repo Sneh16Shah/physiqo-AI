@@ -196,6 +196,7 @@ public class MealService {
                         .proteinG(itemPro)
                         .carbsG(itemCarb)
                         .fatG(itemFat)
+                        .dietaryType(food.getDietaryType() != null ? food.getDietaryType().name() : "VEG")
                         .build());
             }
         }
