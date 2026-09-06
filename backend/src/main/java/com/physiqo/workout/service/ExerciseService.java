@@ -33,7 +33,10 @@ public class ExerciseService {
 
     @Transactional(readOnly = true)
     public Page<Exercise> searchExercises(String category, String equipment, String search, UUID userId, Pageable pageable) {
-        return exerciseRepository.searchExercises(category, equipment, search, userId, pageable);
+        String categoryParam = (category != null && !category.isBlank()) ? category.trim() : null;
+        String equipmentParam = (equipment != null && !equipment.isBlank()) ? equipment.trim() : null;
+        String searchParam = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
+        return exerciseRepository.searchExercises(categoryParam, equipmentParam, searchParam, userId, pageable);
     }
 
     @Transactional(readOnly = true)

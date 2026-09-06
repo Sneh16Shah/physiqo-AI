@@ -28,7 +28,8 @@ public class ExerciseController {
             @RequestParam(required = false) String equipment,
             @RequestParam(required = false) String search,
             Pageable pageable) {
-        Page<Exercise> exercises = exerciseService.searchExercises(category, equipment, search, currentUser.getId(), pageable);
+        UUID userId = currentUser != null ? currentUser.getId() : null;
+        Page<Exercise> exercises = exerciseService.searchExercises(category, equipment, search, userId, pageable);
         return ResponseEntity.ok(exercises);
     }
 

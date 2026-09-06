@@ -13,10 +13,14 @@ import java.util.UUID;
 @Repository
 public interface FoodRepository extends JpaRepository<Food, UUID> {
 
-    @Query("SELECT f FROM Food f WHERE " +
-           "(:search IS NULL OR LOWER(f.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(f.brand) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+    @Query(value = "SELECT f FROM Food f WHERE " +
+           "(:search IS NULL OR LOWER(f.name) LIKE :search OR LOWER(f.brand) LIKE :search) AND " +
            "(:custom IS NULL OR f.custom = :custom) AND " +
-           "(f.custom = false OR f.createdBy = :userId)")
+           "(f.custom = false OR (:userId IS NOT NULL AND f.createdBy = :userId))",
+           countQuery = "SELECT count(f) FROM Food f WHERE " +
+           "(:search IS NULL OR LOWER(f.name) LIKE :search OR LOWER(f.brand) LIKE :search) AND " +
+           "(:custom IS NULL OR f.custom = :custom) AND " +
+           "(f.custom = false OR (:userId IS NOT NULL AND f.createdBy = :userId))")
     Page<Food> searchFoods(
             @Param("search") String search,
             @Param("custom") Boolean custom,

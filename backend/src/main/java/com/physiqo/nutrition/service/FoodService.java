@@ -20,7 +20,8 @@ public class FoodService {
 
     @Transactional(readOnly = true)
     public Page<Food> searchFoods(String search, Boolean custom, UUID userId, Pageable pageable) {
-        return foodRepository.searchFoods(search, custom, userId, pageable);
+        String searchParam = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
+        return foodRepository.searchFoods(searchParam, custom, userId, pageable);
     }
 
     @Transactional(readOnly = true)

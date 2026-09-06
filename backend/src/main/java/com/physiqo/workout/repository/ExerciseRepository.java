@@ -14,11 +14,16 @@ import java.util.UUID;
 @Repository
 public interface ExerciseRepository extends JpaRepository<Exercise, UUID> {
 
-    @Query("SELECT e FROM Exercise e WHERE " +
-           "(:category IS NULL OR e.category = :category) AND " +
+    @Query(value = "SELECT e FROM Exercise e WHERE " +
+           "(:category IS NULL OR e.category = :category OR e.equipment = :category) AND " +
            "(:equipment IS NULL OR e.equipment = :equipment) AND " +
-           "(:search IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
-           "(e.custom = false OR e.createdBy = :userId)")
+           "(:search IS NULL OR LOWER(e.name) LIKE :search) AND " +
+           "(e.custom = false OR (:userId IS NOT NULL AND e.createdBy = :userId))",
+           countQuery = "SELECT count(e) FROM Exercise e WHERE " +
+           "(:category IS NULL OR e.category = :category OR e.equipment = :category) AND " +
+           "(:equipment IS NULL OR e.equipment = :equipment) AND " +
+           "(:search IS NULL OR LOWER(e.name) LIKE :search) AND " +
+           "(e.custom = false OR (:userId IS NOT NULL AND e.createdBy = :userId))")
     Page<Exercise> searchExercises(
             @Param("category") String category,
             @Param("equipment") String equipment,
